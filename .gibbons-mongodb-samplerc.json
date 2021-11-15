@@ -1,0 +1,32 @@
+{
+  "permissionByteLength": 1024,
+  "groupByteLength": 1024,
+  "mongoDbMutationConcurrency": 5,
+  "dbStructure": {
+    "user": {
+      "dbName": "test",
+      "collection": "user",
+      "fields": {
+        "groupsGibbon": "groupsGibbon",
+        "permissionsGibbon": "permissionsGibbon"
+      }
+    },
+    "group": {
+      "dbName": "test",
+      "collection": "group",
+      "fields": {
+        "permissionsGibbon": "permissionsGibbon",
+        "gibbonGroupPosition": "gibbonGroupPosition",
+        "gibbonIsAllocated": "gibbonIsAllocated"
+      }
+    },
+    "permission": {
+      "dbName": "test",
+      "collection": "permission",
+      "fields": {
+        "gibbonPermissionPosition": "gibbonPermissionPosition",
+        "gibbonIsAllocated": "gibbonIsAllocated"
+      }
+    }
+  }
+}

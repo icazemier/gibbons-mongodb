@@ -1,0 +1,9 @@
+{
+  "check-coverage": true,
+  "lines": 96,
+  "extension": [".ts", ".tsx"],
+  "include": ["src/**/!(*.spec.*).[tj]s?(x)"],
+  "exclude": ["**/*.d.ts", "**/*.spec.ts"],
+  "reporter": ["text", "text-summary", "cobertura", "html"],
+  "report-dir": "./coverage"
+}

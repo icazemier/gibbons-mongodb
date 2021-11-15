@@ -6,11 +6,11 @@ name: Node.js CI
 on:
   push:
     branches:
-      - develop
+      - development
       - feature/*
   pull_request:
     branches:
-      - develop
+      - development
 
 jobs:
   test:
@@ -20,7 +20,7 @@ jobs:
       MONGOMS_VERSION: 4.4.5
     strategy:
       matrix:
-        node-version: [12.x, 14.x, 16.x]
+        node-version: [14.x, 16.x, 17.x]
         # See supported Node.js release schedule at https://nodejs.org/en/about/releases/
     steps:
       - uses: actions/checkout@v2
