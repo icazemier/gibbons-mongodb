@@ -26,3 +26,7 @@ Temporary Items
 .DS_Store
 .env
 
+# Claude
+.claude/
+.claude*
+CLAUDE.md

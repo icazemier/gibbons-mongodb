@@ -1,0 +1,38 @@
+{
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Debug Current Test File",
+      "autoAttachChildProcesses": true,
+      "skipFiles": ["<node_internals>/**", "**/node_modules/**"],
+      "program": "${workspaceRoot}/node_modules/vitest/vitest.mjs",
+      "args": ["run", "${relativeFile}"],
+      "smartStep": true,
+      "console": "integratedTerminal"
+    },
+    {
+      // ./build/esm/cli.js init "mongodb://localhost:27017/" --force=true
+      "name": "cli (esm)",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceRoot}/build/esm/bin/cli.js",
+      "stopOnEntry": false,
+      "args": [
+        "init"
+        // "-u=uuuuuuu",
+        // "-c=ccccccc"
+      ],
+      "preLaunchTask": "npm: build",
+      "cwd": "${workspaceRoot}",
+      "runtimeExecutable": null,
+      "env": {
+        "NODE_ENV": "test"
+      }
+    }
+  ]
+}
