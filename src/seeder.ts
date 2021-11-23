@@ -1,8 +1,11 @@
-import { Gibbon } from "@icazemier/gibbons";
 import { MongoClient } from "mongodb";
+import { Gibbon } from "@icazemier/gibbons";
 import PQueue from "p-queue";
-import { Config, DbCollection } from "types.js";
-import { Utils } from './utils.js';
+import { Config, DbCollection } from "interfaces/config.js";
+import { IGibbonGroup } from "interfaces/gibbon-group.js";
+import { IGibbonPermission } from "interfaces/gibbon-permission.js";
+import { IGibbonUser } from "interfaces/gibbon-user.js";
+import { Utils } from "./utils.js";
 
 /**
  * This class is meant to be used when one needs to prepare the Mongo Database with groups and permissions
@@ -13,20 +16,21 @@ export class MongoDbSeeder {
     public readonly dbCollection!: DbCollection;
 
     constructor(mongoClient: MongoClient, config: Config) {
-
         // map collections for convenience
         const user = mongoClient
             .db(config.dbStructure.user.dbName)
-            .collection(config.dbStructure.user.collection);
+            .collection<IGibbonUser>(config.dbStructure.user.collection);
         const group = mongoClient
             .db(config.dbStructure.group.dbName)
-            .collection(config.dbStructure.group.collection);
+            .collection<IGibbonGroup>(config.dbStructure.group.collection);
         const permission = mongoClient
             .db(config.dbStructure.permission.dbName)
-            .collection(config.dbStructure.permission.collection);
+            .collection<IGibbonPermission>(
+                config.dbStructure.permission.collection
+            );
 
         this.config = config;
-        this.dbCollection = { user, group, permission } as DbCollection;
+        this.dbCollection = { user, group, permission };
     }
 
     /**
@@ -45,10 +49,11 @@ export class MongoDbSeeder {
         )) {
             // Prepare data
             const data = {
-                [this.config.dbStructure.group.fields.permissionsGibbon]:
-                    Gibbon.create(this.config.groupByteLength).encode(),
-                [this.config.dbStructure.group.fields.gibbonGroupPosition]: seq,
-                [this.config.dbStructure.group.fields.gibbonIsAllocated]: false,
+                permissionsGibbon: Gibbon.create(
+                    this.config.groupByteLength
+                ).encode() as Buffer,
+                gibbonGroupPosition: seq as number,
+                gibbonIsAllocated: false,
             };
 
             // Push task to queue
@@ -79,10 +84,8 @@ export class MongoDbSeeder {
         )) {
             // Prepare data
             const data = {
-                [this.config.dbStructure.permission.fields
-                    .gibbonPermissionPosition]: seq,
-                [this.config.dbStructure.permission.fields.gibbonIsAllocated]:
-                    false,
+                gibbonPermissionPosition: seq as number,
+                gibbonIsAllocated: false,
             };
 
             // Push task to queue
@@ -111,22 +114,35 @@ export class MongoDbSeeder {
 
     /**
      * This ensures we pre-populate the database collections with groups and permissions ensuring we've got the sequence in order
-     * When called multiple times, we skip seeding 
+     * When called multiple times, we skip seeding
      * @returns {Promise<void>}
      */
     async populateGroupsAndPermissions(): Promise<void> {
-        const groupPermissionsGibbon =
-            this.config.dbStructure.group.fields.permissionsGibbon;
-        const gibbonsWasHere =
-            (await this.dbCollection.group
-                .find({ [groupPermissionsGibbon]: { $exists: true } })
-                .count()) > 0;
+        const countGroups = this.dbCollection.group
+            .find(
+                {
+                    gibbonIsAllocated: { $exists: true },
+                },
+                { limit: 1 }
+            )
+            .count();
+        const countPermissions = this.dbCollection.permission
+            .find(
+                {
+                    gibbonIsAllocated: { $exists: true },
+                },
+                { limit: 1 }
+            )
+            .count();
+        const [count1, count2] = await Promise.all([
+            countGroups,
+            countPermissions,
+        ]);
 
-        if (gibbonsWasHere) {
-            console.warn(
+        if ((count1 | count2) !== 0x0) {
+            throw new Error(
                 `Called populateGroupsAndPermissions, but permissions and groups seem to be populated already`
             );
-            return;
         }
 
         await Promise.all([this.populateGroups(), this.populatePermissions()]);

@@ -1,8 +1,8 @@
 import { expect } from "chai";
-import { ConfigLoader } from "../src/config.js";
+import { ConfigLoader } from "./config.js";
 
 describe("Happy flows ", () => {
-    it("Find users by a group name with positions", async () => {
+    it("Load sample config", async () => {
         const config = await ConfigLoader.load("gibbons-mongodb-sample");
 
         expect(config).to.be.ok;
@@ -10,7 +10,7 @@ describe("Happy flows ", () => {
         expect(true).to.equal(true);
     });
 
-    it("Find users by a group name with positions, load faulty config", async () => {
+    it("Load faulty config", async () => {
         const throwsError = async () =>
             ConfigLoader.load("gibbons-mongodb-sampleeeee");
 

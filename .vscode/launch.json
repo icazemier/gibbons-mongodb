@@ -19,6 +19,25 @@
       "env": {
         "NODE_ENV": "test"
       }
+    },
+    {
+      // ./build/esm/cli.js init "mongodb://localhost:27017/" --force=true
+      "name": "cli (esm)",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceRoot}/build/esm/bin/cli.js",
+      "stopOnEntry": false,
+      "args": [
+        "init",
+        // "-u=uuuuuuu",
+        // "-c=ccccccc"
+      ],
+      "preLaunchTask": "npm: build",
+      "cwd": "${workspaceRoot}",
+      "runtimeExecutable": null,
+      "env": {
+        "NODE_ENV": "test"
+      }
     }
   ]
 }
