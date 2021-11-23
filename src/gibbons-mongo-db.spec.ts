@@ -1,70 +1,90 @@
 import { expect } from "chai";
 import { Gibbon } from "@icazemier/gibbons";
-import { Binary, MongoClient, ObjectId } from "mongodb";
+import { Binary, Collection, MongoClient, ObjectId } from "mongodb";
 import { writableNoopStream } from "noop-stream";
 import { pipeline, PassThrough } from "stream";
-import { ConfigLoader } from "../src/config.js";
-import { DbCollection } from "../src/types.js";
 import {
     usersFixtures,
     groupsFixtures,
     permissionsFixtures,
     PERMISSION_POSITIONS_FIXTURES,
     GROUP_POSITION_FIXTURES,
-} from "./helper/fixtures.js";
-import { seedTestFixtures } from "./helper/seeders.js";
-import { MongoDBAdapter } from "../src/mongo-db-adapter.js";
-import { MongoDbSeeder } from "../src/mongo-db-seeder.js";
-import { MongoDbTestServer } from "./helper/mongodb-test-server.js";
-import { TestMongoDbGroup, TestMongoDbUser } from "./helper/test-types.js";
-
-interface User {
-    _id: ObjectId;
-    groupsGibbon: Binary;
-    permissionsGibbon: Binary;
-}
+} from "../test/helper/fixtures.js";
+import {
+    TestUser,
+    TestPermission,
+    TestGroup,
+} from "../test/interfaces/test-interfaces.js";
+import {
+    seedTestFixtures,
+    seedUserTestFixtures,
+    tearDownGroupTestFixtures,
+    tearDownPermissionTestFixtures,
+    tearDownUserTestFixtures,
+} from "../test/helper/seeders.js";
+import { MongoDbTestServer } from "../test/helper/mongodb-test-server.js";
+import { GibbonsMongoDb } from "./gibbons-mongo-db.js";
+import { MongoDbSeeder } from "./seeder.js";
+import { ConfigLoader } from "./config.js";
+import { GibbonGroup } from "./models/index.js";
+import { Config } from "./interfaces/index.js";
 
 describe("Happy flows ", () => {
-    let mongoDbAdapter: MongoDBAdapter;
+    let mongoDbAdapter: GibbonsMongoDb;
     let mongoClient: MongoClient;
-    let dbCollection: DbCollection;
+    let dbCollection: {
+        user: Collection<TestUser>;
+        group: Collection<TestGroup>;
+        permission: Collection<TestPermission>;
+    };
+    let config: Config;
 
     before(async () => {
         mongoClient = await new MongoClient(MongoDbTestServer.uri).connect();
-        const config = await ConfigLoader.load("gibbons-mongodb-sample");
+        config = await ConfigLoader.load("gibbons-mongodb-sample");
 
-        const user = mongoClient
-            .db(config.dbStructure.user.dbName)
-            .collection(config.dbStructure.user.collection);
-        const group = mongoClient
-            .db(config.dbStructure.group.dbName)
-            .collection(config.dbStructure.group.collection);
-        const permission = mongoClient
-            .db(config.dbStructure.permission.dbName)
-            .collection(config.dbStructure.permission.collection);
+        dbCollection = {
+            user: mongoClient
+                .db(config.dbStructure.user.dbName)
+                .collection<TestUser>(config.dbStructure.user.collection),
+            group: mongoClient
+                .db(config.dbStructure.group.dbName)
+                .collection<TestGroup>(config.dbStructure.group.collection),
+            permission: mongoClient
+                .db(config.dbStructure.permission.dbName)
+                .collection<TestPermission>(
+                    config.dbStructure.permission.collection
+                ),
+        };
 
-        dbCollection = { user, group, permission } as DbCollection;
-
-        mongoDbAdapter = new MongoDBAdapter(mongoClient, config);
+        mongoDbAdapter = new GibbonsMongoDb(mongoClient, config);
         const mongoDbSeeder = new MongoDbSeeder(mongoClient, config);
         await mongoDbSeeder.initialise();
         // Test fixtures
         await seedTestFixtures(mongoClient, config);
     });
 
+    beforeEach(async () => {
+        await seedUserTestFixtures(mongoClient, config);
+    });
+
+    afterEach(async () => {
+        await tearDownUserTestFixtures(mongoClient, config);
+    });
+
     after(async () => {
-        await Promise.all([
-            dbCollection.permission.drop({}),
-            dbCollection.group.drop({}),
-            dbCollection.user.drop({}),
-        ]);
+        await tearDownGroupTestFixtures(mongoClient, config);
+        await tearDownPermissionTestFixtures(mongoClient, config);
         await mongoClient.close();
     });
 
     it("Find users by a group name with positions", async () => {
-        const query = { name: groupsFixtures[0].name, gibbonIsAllocated: true };
+        const filter = {
+            name: groupsFixtures[0].name,
+            gibbonIsAllocated: true,
+        };
         const groupPositions = await dbCollection.group
-            .find(query, {
+            .find(filter, {
                 projection: {
                     _id: 0,
                     gibbonGroupPosition: 1,
@@ -73,19 +93,32 @@ describe("Happy flows ", () => {
             .map((group) => group.gibbonGroupPosition)
             .toArray();
 
+        const testUserfilter = {
+            groupsGibbon: {
+                $bitsAnySet: Gibbon.create(1024)
+                    .setAllFromPositions(groupPositions)
+                    .encode() as Buffer,
+            },
+        };
+
+        const testUser = await dbCollection.user.findOne(testUserfilter);
+
+        console.log(`Test user: ${testUser?.email}`);
+
         const users = (await mongoDbAdapter
             .findUsersByGroups(groupPositions)
-            .toArray()) as TestMongoDbUser[];
+            .toArray()) as TestUser[];
 
         expect(users).to.be.an("array");
         expect(users).to.have.lengthOf(1);
         const [user] = users;
+
         expect(ObjectId.isValid(user._id)).to.equal(true);
         expect(user.name).to.equal(usersFixtures[2].name);
         expect(user.email).to.equal(usersFixtures[2].email);
         expect(
             Buffer.compare(
-                user.groupsGibbon.toBuffer(),
+                (user.groupsGibbon as Gibbon).toBuffer(),
                 usersFixtures[2].groupsGibbon
             )
         ).to.equal(0);
@@ -97,7 +130,7 @@ describe("Happy flows ", () => {
         ]);
         const users = (await mongoDbAdapter
             .findUsersByGroups(groupsGibbon)
-            .toArray()) as TestMongoDbUser[];
+            .toArray()) as TestUser[];
 
         expect(users).to.be.an("array");
         expect(users).to.have.lengthOf(1);
@@ -107,7 +140,7 @@ describe("Happy flows ", () => {
         expect(user.email).to.equal(usersFixtures[2].email);
         expect(
             Buffer.compare(
-                user.groupsGibbon.toBuffer(),
+                (user.groupsGibbon as Gibbon).toBuffer(),
                 usersFixtures[2].groupsGibbon
             )
         ).to.equal(0);
@@ -116,12 +149,12 @@ describe("Happy flows ", () => {
     it("Find users by permission name with positions", async () => {
         // 'God mode' => 'GI Joe' => 'Captain planet'
 
-        const query = {
+        const filter = {
             name: permissionsFixtures[0].name,
             gibbonIsAllocated: true,
         };
         const permissionPositions = await dbCollection.permission
-            .find(query, {
+            .find(filter, {
                 projection: {
                     _id: 0,
                     gibbonPermissionPosition: 1,
@@ -132,7 +165,7 @@ describe("Happy flows ", () => {
 
         const users = (await mongoDbAdapter
             .findUsersByPermissions(permissionPositions)
-            .toArray()) as TestMongoDbUser[];
+            .toArray()) as TestUser[];
 
         expect(users).to.be.an("array");
         expect(users).to.have.lengthOf(1);
@@ -142,16 +175,19 @@ describe("Happy flows ", () => {
         expect(user.email).to.equal(usersFixtures[2].email);
         expect(
             Buffer.compare(
-                user.groupsGibbon.toBuffer(),
+                (user.groupsGibbon as Gibbon).toBuffer(),
                 usersFixtures[2].groupsGibbon
             )
         ).to.equal(0);
     });
 
     it("Find users by group positions using Node.js streams", async () => {
-        const query = { name: groupsFixtures[2].name, gibbonIsAllocated: true };
+        const filter = {
+            name: groupsFixtures[2].name,
+            gibbonIsAllocated: true,
+        };
         const groupPositions = await dbCollection.group
-            .find(query, {
+            .find(filter, {
                 projection: {
                     _id: 0,
                     gibbonGroupPosition: 1,
@@ -247,12 +283,12 @@ describe("Happy flows ", () => {
     it("Find groups by permissions", async () => {
         // 'God mode' => 'GI Joe'
 
-        const query = {
+        const filter = {
             name: permissionsFixtures[0].name,
             gibbonIsAllocated: true,
         };
         const permissionPositions = await dbCollection.permission
-            .find(query, {
+            .find(filter, {
                 projection: {
                     _id: 0,
                     gibbonPermissionPosition: 1,
@@ -263,7 +299,7 @@ describe("Happy flows ", () => {
 
         const groups = (await mongoDbAdapter
             .findGroupsByPermissions(permissionPositions)
-            .toArray()) as TestMongoDbGroup[];
+            .toArray()) as TestGroup[];
         expect(groups).to.be.an("array");
         expect(groups).to.have.lengthOf(1);
         const [group] = groups;
@@ -271,7 +307,7 @@ describe("Happy flows ", () => {
         expect(group.name).to.equal(groupsFixtures[0].name);
         expect(
             Buffer.compare(
-                group.permissionsGibbon.toBuffer(),
+                (group.permissionsGibbon as Gibbon).toBuffer(),
                 groupsFixtures[0].permissionsGibbon
             )
         ).to.equal(0);
@@ -289,22 +325,23 @@ describe("Happy flows ", () => {
         const expectedToAllocateToPosition =
             PERMISSION_POSITIONS_FIXTURES.GOD_MODE + 1;
 
-        const [nonAllocatedPermission] = await dbCollection.permission
-            .find({
-                gibbonPermissionPosition: expectedToAllocateToPosition,
-            })
-            .toArray();
+        const nonAllocatedPermission = (await dbCollection.permission.findOne({
+            gibbonPermissionPosition: expectedToAllocateToPosition,
+        })) as TestPermission;
 
         expect(nonAllocatedPermission.gibbonPermissionPosition).to.equal(
             expectedToAllocateToPosition
         );
-        expect(!!nonAllocatedPermission.name).to.equal(false);
+        expect(Boolean(nonAllocatedPermission.name)).to.equal(false);
         expect(nonAllocatedPermission.gibbonIsAllocated).to.equal(false);
 
-        const permissionToCreate = { name: "Able to create a shopping basket" };
-        const permission = await mongoDbAdapter.allocatePermission(
-            permissionToCreate
-        );
+        const permissionToCreate = {
+            name: "Able to create a shopping basket",
+        } as TestPermission;
+        const permission =
+            (await mongoDbAdapter.allocatePermission<TestPermission>(
+                permissionToCreate
+            )) as TestPermission;
 
         expect(permission.name).to.equal(permissionToCreate.name);
         expect(permission.gibbonIsAllocated).to.equal(true);
@@ -316,11 +353,17 @@ describe("Happy flows ", () => {
     it("Allocate some permissions on groups, then deallocate them and check groups for permissions", async () => {
         // Prepare some permissions (which will be removed later)
         const { gibbonPermissionPosition: position1 } =
-            await mongoDbAdapter.allocatePermission({ name: "permission 1" });
+            await mongoDbAdapter.allocatePermission({
+                name: "permission 1",
+            } as TestPermission);
         const { gibbonPermissionPosition: position2 } =
-            await mongoDbAdapter.allocatePermission({ name: "permission 2" });
+            await mongoDbAdapter.allocatePermission({
+                name: "permission 2",
+            } as TestPermission);
         const { gibbonPermissionPosition: position3 } =
-            await mongoDbAdapter.allocatePermission({ name: "permission 3" });
+            await mongoDbAdapter.allocatePermission({
+                name: "permission 3",
+            } as TestPermission);
         const permissionPositions = [
             position1,
             position2,
@@ -328,16 +371,20 @@ describe("Happy flows ", () => {
         ] as Array<number>;
 
         // Fetch an existing group from fixtures (to store these permissions on)
-        const [groupBefore] = await dbCollection.group
-            .find({ name: "GI Joe" })
-            .toArray();
+        const groupBefore = (await dbCollection.group.findOne({
+            name: "GI Joe",
+        })) as TestGroup;
+
         const {
-            permissionsGibbon: { buffer: bufferBefore },
+            permissionsGibbon,
             gibbonGroupPosition: gibbonGroupPositionBefore,
         } = groupBefore;
+
+        const { buffer: bufferBefore } = permissionsGibbon as Binary;
+
         const gibbonPermissionsBefore = Gibbon.decode(bufferBefore)
             .setAllFromPositions(permissionPositions)
-            .encode();
+            .encode() as Buffer;
 
         // Update permissions for this group
         await dbCollection.group.findOneAndUpdate(
@@ -367,7 +414,7 @@ describe("Happy flows ", () => {
                     .encode() as Buffer,
                 permissionsGibbon: gibbonPermissionsBefore,
             },
-        ];
+        ] as TestUser[];
         await dbCollection.user.insertMany(usersBefore);
 
         // Finally test "deallocate" and see if the permissions are deallocated and the test group is updated
@@ -388,15 +435,14 @@ describe("Happy flows ", () => {
             expect(ObjectId.isValid(permission._id)).to.equal(true);
             expect(permission.gibbonPermissionPosition).to.be.a("number");
             expect(permission.gibbonIsAllocated).to.equal(false);
-            expect(!!permission.name).to.equal(false);
+            expect(Boolean(permission.name)).to.equal(false);
         });
 
         const [groupAfter] = await dbCollection.group
             .find({ name: "GI Joe" })
             .toArray();
-        const {
-            permissionsGibbon: { buffer: bufferAfter },
-        } = groupAfter;
+        const { permissionsGibbon: permissionsAfter } = groupAfter;
+        const { buffer: bufferAfter } = permissionsAfter as Binary;
         const gibbonAfter = Gibbon.decode(bufferAfter);
 
         // We expect the group to still have the one stored from fixtures
@@ -416,8 +462,9 @@ describe("Happy flows ", () => {
             .toArray();
 
         usersAfter.forEach((user) => {
-            const { buffer: permissionBuffer } = user.permissionsGibbon;
-            const { buffer: groupBuffer } = user.groupsGibbon;
+            const { buffer: permissionBuffer } =
+                user.permissionsGibbon as Binary;
+            const { buffer: groupBuffer } = user.groupsGibbon as Binary;
             const permissionPositionsGibbon = Gibbon.decode(permissionBuffer);
             // Permissions should be gone
             expect(
@@ -441,25 +488,23 @@ describe("Happy flows ", () => {
         const { gibbonGroupPosition: position1 } =
             await mongoDbAdapter.allocateGroup({
                 name: "My allocated test group 1 (should be position 3)",
-            });
+            } as TestGroup);
         const { gibbonGroupPosition: position2 } =
             await mongoDbAdapter.allocateGroup({
                 name: "My allocated test group 2 (should be position 4)",
-            });
+            } as TestGroup);
 
         // Because these weren't allocated yet, and the first to be allocated (See fixtures)
         expect(position1).to.equal(3);
         expect(position2).to.equal(4);
 
         // Make users member of these groups
-        const userBefore = (await dbCollection.user.findOne({
+        const userBefore = await dbCollection.user.findOne({
             email: "captain@planet.nl",
-        })) as User;
+        });
 
-        const {
-            groupsGibbon: { buffer: groupsBufferBefore },
-            _id,
-        } = userBefore;
+        const { groupsGibbon: groupsBefore, _id } = userBefore as TestUser;
+        const { buffer: groupsBufferBefore } = groupsBefore as Binary;
         // Get current group subscriptions for this user
         const groupsGibbonBefore = Gibbon.decode(groupsBufferBefore);
         const isMemberOfGroupsBefore = groupsGibbonBefore.hasAnyFromPositions([
@@ -481,12 +526,12 @@ describe("Happy flows ", () => {
         await mongoDbAdapter.deallocateGroups([position1, position2]);
 
         // Test if groups are deallocated and this user isn't a member of these groups anymore
-        const userAfter = (await dbCollection.user.findOne({
+        const userAfter = await dbCollection.user.findOne({
             _id,
-        })) as User;
-        const {
-            groupsGibbon: { buffer: groupsBufferAfter },
-        } = userAfter;
+        });
+        const { groupsGibbon } = userAfter as TestUser;
+
+        const { buffer: groupsBufferAfter } = groupsGibbon as Binary;
 
         const hasGroupsAfter = Gibbon.decode(
             groupsBufferAfter
@@ -495,16 +540,17 @@ describe("Happy flows ", () => {
     });
 
     it("Find Groups By User", async () => {
-        const user = (await dbCollection.user.findOne({
+        const user = await dbCollection.user.findOne({
             name: /Arnold/,
-        })) as User;
-        const {
-            groupsGibbon: { buffer },
-        } = user;
+        });
+
+        const { groupsGibbon } = user as TestUser;
+        const { buffer } = groupsGibbon as Binary;
+
         const gibbon = Gibbon.decode(buffer);
         const groupsFromDB = (await mongoDbAdapter
             .findGroups(gibbon)
-            .toArray()) as TestMongoDbGroup[];
+            .toArray()) as TestGroup[];
         expect(groupsFromDB).to.be.an("array");
         expect(groupsFromDB).to.have.lengthOf(1);
 
@@ -517,7 +563,9 @@ describe("Happy flows ", () => {
         );
 
         expect(ObjectId.isValid(_id)).to.equal(true);
-        expect(gibbonFromFixtures.equals(permissionsGibbon)).to.equal(true);
+        expect(gibbonFromFixtures.equals(permissionsGibbon as Gibbon)).to.equal(
+            true
+        );
         expect(group.gibbonGroupPosition).to.equal(
             groupFromFixture.gibbonGroupPosition
         );
@@ -529,7 +577,7 @@ describe("Happy flows ", () => {
             name: /Arnold/,
         });
         // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        const { buffer } = user!.permissionsGibbon;
+        const { buffer } = user!.permissionsGibbon as Binary;
         const valid =
             await mongoDbAdapter.validateUserPermissionsForAllPermissions(
                 buffer,
@@ -546,7 +594,7 @@ describe("Happy flows ", () => {
             name: /Arnold/,
         });
         // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        const { buffer } = user!.permissionsGibbon;
+        const { buffer } = user!.permissionsGibbon as Binary;
         const valid =
             await mongoDbAdapter.validateUserPermissionsForAllPermissions(
                 buffer,
@@ -564,7 +612,7 @@ describe("Happy flows ", () => {
             email: "john@doe.born",
         });
         // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        const { buffer } = user!.permissionsGibbon;
+        const { buffer } = user!.permissionsGibbon as Binary;
         const valid =
             await mongoDbAdapter.validateUserPermissionsForAllPermissions(
                 buffer,
@@ -577,11 +625,12 @@ describe("Happy flows ", () => {
     });
 
     it("Validate a user on any permissions", async () => {
-        const user = (await dbCollection.user.findOne({
+        const user = await dbCollection.user.findOne({
             name: /Arnold/,
-        })) as User;
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-        const { buffer } = user.permissionsGibbon;
+        });
+
+        const { permissionsGibbon } = user as TestUser;
+        const { buffer } = permissionsGibbon as Binary;
         const valid =
             await mongoDbAdapter.validateUserPermissionsForAnyPermissions(
                 buffer,
@@ -591,11 +640,11 @@ describe("Happy flows ", () => {
     });
 
     it("Validate a user on any permissions and some", async () => {
-        const user = (await dbCollection.user.findOne({
+        const user = await dbCollection.user.findOne({
             name: /Arnold/,
-        })) as User;
-
-        const { buffer } = user.permissionsGibbon;
+        });
+        const { permissionsGibbon } = user as TestUser;
+        const { buffer } = permissionsGibbon as Binary;
         const valid =
             await mongoDbAdapter.validateUserPermissionsForAnyPermissions(
                 buffer,
@@ -608,11 +657,11 @@ describe("Happy flows ", () => {
     });
 
     it(`Validate a user on any permissions, but user hasn't got any group membership`, async () => {
-        const user = (await dbCollection.user.findOne({
+        const user = await dbCollection.user.findOne({
             email: "john@doe.born",
-        })) as User;
-
-        const { buffer } = user.permissionsGibbon;
+        });
+        const { permissionsGibbon } = user as TestUser;
+        const { buffer } = permissionsGibbon as Binary;
         const valid =
             await mongoDbAdapter.validateUserPermissionsForAnyPermissions(
                 buffer,
@@ -625,11 +674,11 @@ describe("Happy flows ", () => {
     });
 
     it(`Validate a user on any permissions, but this user hasn't even got this one set`, async () => {
-        const user = (await dbCollection.user.findOne({
+        const user = await dbCollection.user.findOne({
             name: /Arnold/,
-        })) as User;
-
-        const { buffer } = user.permissionsGibbon;
+        });
+        const { permissionsGibbon } = user as TestUser;
+        const { buffer } = permissionsGibbon as Binary;
         const valid =
             await mongoDbAdapter.validateUserPermissionsForAnyPermissions(
                 buffer,
@@ -639,12 +688,12 @@ describe("Happy flows ", () => {
     });
 
     it("Validate a user on all mandatory groups", async () => {
-        const user = (await dbCollection.user.findOne({
+        const user = await dbCollection.user.findOne({
             name: "Captain Planet",
-        })) as User;
-
-        const { buffer } = user.groupsGibbon;
-        const valid = mongoDbAdapter.validateUserGroupsForAllGroups(buffer, [
+        });
+        const { groupsGibbon } = user as TestUser;
+        const { buffer } = groupsGibbon as Binary;
+        const valid = GibbonsMongoDb.validateUserGroupsForAllGroups(buffer, [
             GROUP_POSITION_FIXTURES.GI_JOE,
             GROUP_POSITION_FIXTURES.A_TEAM,
         ]);
@@ -652,58 +701,60 @@ describe("Happy flows ", () => {
     });
 
     it("Validate a user on any group(s)", async () => {
-        const user = (await dbCollection.user.findOne({
+        const user = await dbCollection.user.findOne({
             name: "Captain Planet",
-        })) as User;
+        });
 
-        const { buffer } = user.groupsGibbon;
-        const valid = mongoDbAdapter.validateUserGroupsForAnyGroups(buffer, [
+        const { groupsGibbon } = user as TestUser;
+        const { buffer } = groupsGibbon as Binary;
+        const valid = GibbonsMongoDb.validateUserGroupsForAnyGroups(buffer, [
             GROUP_POSITION_FIXTURES.GI_JOE,
         ]);
         expect(valid).to.equal(true);
     });
 
     it("Validate a user on another group (any)", async () => {
-        const user = (await dbCollection.user.findOne({
+        const user = await dbCollection.user.findOne({
             name: "Captain Planet",
-        })) as User;
-
-        const { buffer } = user.groupsGibbon;
-        const valid = mongoDbAdapter.validateUserGroupsForAnyGroups(buffer, [
+        });
+        const { groupsGibbon } = user as TestUser;
+        const { buffer } = groupsGibbon as Binary;
+        const valid = GibbonsMongoDb.validateUserGroupsForAnyGroups(buffer, [
             GROUP_POSITION_FIXTURES.A_TEAM,
         ]);
         expect(valid).to.equal(true);
     });
 
     it("Validate a user on any group, but is not member of this groups", async () => {
-        const user = (await dbCollection.user.findOne({
+        const user = await dbCollection.user.findOne({
             name: "Captain Planet",
-        })) as User;
-
-        const { buffer } = user.groupsGibbon;
-        const valid = mongoDbAdapter.validateUserGroupsForAnyGroups(buffer, [
+        });
+        const { groupsGibbon } = user as TestUser;
+        const { buffer } = groupsGibbon as Binary;
+        const valid = GibbonsMongoDb.validateUserGroupsForAnyGroups(buffer, [
             GROUP_POSITION_FIXTURES.PLANETEERS,
         ]);
         expect(valid).to.equal(false);
     });
 
     it("Validate a user on any group, but should not be member of no groups", async () => {
-        const user = (await dbCollection.user.findOne({
+        const user = await dbCollection.user.findOne({
             name: "Captain Planet",
-        })) as User;
-
-        const { buffer } = user.groupsGibbon;
-        const valid = mongoDbAdapter.validateUserGroupsForAnyGroups(buffer, []);
+        });
+        const { groupsGibbon } = user as TestUser;
+        const { buffer } = groupsGibbon as Binary;
+        const valid = GibbonsMongoDb.validateUserGroupsForAnyGroups(buffer, []);
         expect(valid).to.equal(false);
     });
 
     it("Fetch aggregated permissions for user", async () => {
-        const user = (await dbCollection.user.findOne({
+        const user = await dbCollection.user.findOne({
             name: "Captain Planet",
-        })) as User;
-        const {
-            groupsGibbon: { buffer },
-        } = user;
+        });
+
+        const { groupsGibbon } = user as TestUser;
+        const { buffer } = groupsGibbon as Binary;
+
         const gibbon = await mongoDbAdapter.getPermissionsGibbonForGroups(
             Gibbon.decode(buffer)
         );
@@ -733,7 +784,7 @@ describe("Happy flows ", () => {
             PERMISSION_POSITIONS_FIXTURES.GOD_MODE,
             PERMISSION_POSITIONS_FIXTURES.THE_EDGE,
         ]);
-        const valid = await mongoDbAdapter.validateAllocatedPermission(
+        const valid = await mongoDbAdapter.validateAllocatedPermissions(
             permissionsGibbon
         );
 
@@ -741,14 +792,18 @@ describe("Happy flows ", () => {
     });
 
     it("Subscribe a user to an allocated Group", async () => {
-        const userBefore = (await dbCollection.user.findOne({
+        // Pick a user
+        const userBefore = await dbCollection.user.findOne({
             name: "Cooper",
-        })) as User;
+        });
 
+        // Keep their group and permission subscriptions in mind
         const {
-            groupsGibbon: { buffer: groupsBufferBefore },
-            permissionsGibbon: { buffer: permissionBufferBefore },
-        } = userBefore;
+            groupsGibbon: groupsBefore,
+            permissionsGibbon: permissionsBefore,
+        } = userBefore as TestUser;
+        const { buffer: groupsBufferBefore } = groupsBefore as Binary;
+        const { buffer: permissionBufferBefore } = permissionsBefore as Binary;
 
         const groupPositionsBefore =
             Gibbon.decode(groupsBufferBefore).getPositionsArray();
@@ -764,18 +819,20 @@ describe("Happy flows ", () => {
             PERMISSION_POSITIONS_FIXTURES.THE_EDGE,
         ]);
 
+        // Execute and subscribe user to a new group
+        // This should subscribe this user to the new group, but also
+        // The corresponding permissions should ben in there.
         await mongoDbAdapter.subscribeUsersToGroups({ name: /Cooper/ }, [
             GROUP_POSITION_FIXTURES.TRANSFORMERS,
         ]);
 
         const userAfter = (await dbCollection.user.findOne({
             name: "Cooper",
-        })) as User;
+        })) as TestUser;
 
-        const {
-            groupsGibbon: { buffer: groupsBufferAfter },
-            permissionsGibbon: { buffer: permissionBufferAfter },
-        } = userAfter;
+        const { groupsGibbon, permissionsGibbon } = userAfter;
+        const { buffer: groupsBufferAfter } = groupsGibbon as Binary;
+        const { buffer: permissionBufferAfter } = permissionsGibbon as Binary;
 
         const groupPositionsAfter =
             Gibbon.decode(groupsBufferAfter).getPositionsArray();
@@ -789,12 +846,88 @@ describe("Happy flows ", () => {
                 GROUP_POSITION_FIXTURES.TRANSFORMERS,
             ].sort()
         );
+        // Because group "transformers" has "admin" as permission:
         expect(permissionPositionsAfter).to.deep.equal(
             [
                 PERMISSION_POSITIONS_FIXTURES.USER,
                 PERMISSION_POSITIONS_FIXTURES.THE_EDGE,
                 PERMISSION_POSITIONS_FIXTURES.ADMIN,
             ].sort()
+        );
+    });
+
+    it("Subscribe Permissions To Groups", async () => {
+        // Pick a user
+        const userBefore = await dbCollection.user.findOne({
+            name: "Cooper",
+        });
+        // Keep their group and permission subscriptions in mind
+        const {
+            groupsGibbon: groupsBefore,
+            permissionsGibbon: permissionsBefore,
+        } = userBefore as TestUser;
+        const { buffer: groupsBufferBefore } = groupsBefore as Binary;
+        const { buffer: permissionBufferBefore } = permissionsBefore as Binary;
+
+        const groupPositionsBefore =
+            Gibbon.decode(groupsBufferBefore).getPositionsArray();
+        const permissionPositionsBefore = Gibbon.decode(
+            permissionBufferBefore
+        ).getPositionsArray();
+
+        expect(groupPositionsBefore).to.deep.equal([
+            GROUP_POSITION_FIXTURES.PLANETEERS,
+        ]);
+        expect(permissionPositionsBefore).to.deep.equal([
+            PERMISSION_POSITIONS_FIXTURES.USER,
+            PERMISSION_POSITIONS_FIXTURES.THE_EDGE,
+        ]);
+
+        // Add a permission to an existing group:
+        const permissions = Gibbon.create(1024).setAllFromPositions([
+            PERMISSION_POSITIONS_FIXTURES.BACK_DOOR,
+        ]);
+        const groups = Gibbon.create(1024).setAllFromPositions([
+            GROUP_POSITION_FIXTURES.PLANETEERS,
+        ]);
+        await mongoDbAdapter.subscribePermissionsToGroups(groups, permissions);
+
+        const userAfter = await dbCollection.user.findOne({
+            name: "Cooper",
+        });
+        const {
+            groupsGibbon: groupsAfter,
+            permissionsGibbon: permissionsAfter,
+        } = userAfter as TestUser;
+
+        const { buffer: groupsBufferAfter } = groupsAfter as Binary;
+        const { buffer: permissionBufferAfter } = permissionsAfter as Binary;
+
+        const groupPositionsAfter =
+            Gibbon.decode(groupsBufferAfter).getPositionsArray();
+        const permissionPositionsAfter = Gibbon.decode(
+            permissionBufferAfter
+        ).getPositionsArray();
+
+        expect(groupPositionsAfter).to.deep.equal([
+            GROUP_POSITION_FIXTURES.PLANETEERS,
+        ]);
+        expect(permissionPositionsAfter).to.deep.equal([
+            PERMISSION_POSITIONS_FIXTURES.USER,
+            PERMISSION_POSITIONS_FIXTURES.BACK_DOOR,
+            PERMISSION_POSITIONS_FIXTURES.THE_EDGE,
+        ]);
+    });
+});
+
+describe("Unhappy flows", () => {
+    it("Try to pass wrong data", async () => {
+        const throwsError = async () => {
+            GibbonGroup.ensureGibbon("wrong data type" as unknown as Buffer);
+        };
+
+        await expect(throwsError()).to.be.rejectedWith(
+            "`Gibbon`, `Array<number>` or `Buffer` expected"
         );
     });
 });

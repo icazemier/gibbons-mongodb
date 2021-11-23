@@ -5,28 +5,15 @@
   "dbStructure": {
     "user": {
       "dbName": "test",
-      "collection": "user",
-      "fields": {
-        "groupsGibbon": "groupsGibbon",
-        "permissionsGibbon": "permissionsGibbon"
-      }
+      "collection": "user"
     },
     "group": {
       "dbName": "test",
-      "collection": "group",
-      "fields": {
-        "permissionsGibbon": "permissionsGibbon",
-        "gibbonGroupPosition": "gibbonGroupPosition",
-        "gibbonIsAllocated": "gibbonIsAllocated"
-      }
+      "collection": "group"
     },
     "permission": {
       "dbName": "test",
-      "collection": "permission",
-      "fields": {
-        "gibbonPermissionPosition": "gibbonPermissionPosition",
-        "gibbonIsAllocated": "gibbonIsAllocated"
-      }
+      "collection": "permission"
     }
   }
 }
