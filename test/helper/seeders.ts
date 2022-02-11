@@ -1,11 +1,11 @@
-import { Gibbon } from "@icazemier/gibbons";
-import { MongoClient, UpdateResult } from "mongodb";
-import { Config } from "../../src/interfaces/config.js";
+import { Gibbon } from '@icazemier/gibbons';
+import { MongoClient, UpdateResult } from 'mongodb';
+import { Config } from '../../src/interfaces/config.js';
 import {
     permissionsFixtures,
     usersFixtures,
     groupsFixtures,
-} from "./fixtures.js";
+} from './fixtures.js';
 
 export const tearDownGroupTestFixtures = async (
     mongoClient: MongoClient,
@@ -13,7 +13,7 @@ export const tearDownGroupTestFixtures = async (
 ) => {
     await mongoClient
         .db(config.dbStructure.group.dbName)
-        .collection(config.dbStructure.group.collection)
+        .collection(config.dbStructure.group.collectionName)
         .deleteMany({});
 };
 
@@ -23,7 +23,7 @@ export const tearDownPermissionTestFixtures = async (
 ) => {
     await mongoClient
         .db(config.dbStructure.permission.dbName)
-        .collection(config.dbStructure.permission.collection)
+        .collection(config.dbStructure.permission.collectionName)
         .deleteMany({});
 };
 
@@ -33,7 +33,7 @@ export const tearDownUserTestFixtures = async (
 ) => {
     await mongoClient
         .db(config.dbStructure.user.dbName)
-        .collection(config.dbStructure.user.collection)
+        .collection(config.dbStructure.user.collectionName)
         .deleteMany({});
 };
 
@@ -57,7 +57,7 @@ export const seedUserTestFixtures = async (
 
     await mongoClient
         .db(config.dbStructure.user.dbName)
-        .collection(config.dbStructure.user.collection)
+        .collection(config.dbStructure.user.collectionName)
         .insertMany(usersFixtures);
 };
 
@@ -69,7 +69,7 @@ export const seedPermissionTestFixtures = async (
         ({ name, gibbonPermissionPosition, gibbonIsAllocated }) => {
             return mongoClient
                 .db(config.dbStructure.permission.dbName)
-                .collection(config.dbStructure.permission.collection)
+                .collection(config.dbStructure.permission.collectionName)
                 .updateOne(
                     { gibbonPermissionPosition },
                     { $set: { name, gibbonIsAllocated } }
@@ -93,7 +93,7 @@ export const seedGroupTestFixtures = async (
         }) => {
             return mongoClient
                 .db(config.dbStructure.group.dbName)
-                .collection(config.dbStructure.group.collection)
+                .collection(config.dbStructure.group.collectionName)
                 .updateOne(
                     { gibbonGroupPosition },
                     { $set: { name, gibbonIsAllocated, permissionsGibbon } }

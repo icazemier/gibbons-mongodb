@@ -1,25 +1,25 @@
-import { expect } from "chai";
-import { Collection, MongoClient } from "mongodb";
-import { GibbonsMongoDb } from "./gibbons-mongo-db.js";
-import { MongoDbSeeder } from "./seeder.js";
-import { ConfigLoader } from "./config.js";
-import { MongoDbTestServer } from "../test/helper/mongodb-test-server.js";
+import { expect } from 'chai';
+import { Collection, MongoClient } from 'mongodb';
+import { GibbonsMongoDb } from './gibbons-mongo-db.js';
+import { MongoDbSeeder } from './seeder.js';
+import { ConfigLoader } from './config.js';
+import { MongoDbTestServer } from '../test/helper/mongodb-memory-server.js';
 import {
     seedTestFixtures,
     seedUserTestFixtures,
     tearDownGroupTestFixtures,
     tearDownPermissionTestFixtures,
     tearDownUserTestFixtures,
-} from "../test/helper/seeders.js";
+} from '../test/helper/seeders.js';
 
 import {
     TestGroup,
     TestPermission,
     TestUser,
-} from "../test/interfaces/test-interfaces.js";
-import { Config } from "./interfaces/index.js";
+} from '../test/interfaces/test-interfaces.js';
+import { Config } from './interfaces/index.js';
 
-describe("Explore the outer rims of permission / groups", () => {
+describe('Explore the outer rims of permission / groups', () => {
     let mongoDbAdapter: GibbonsMongoDb;
     let mongoClient: MongoClient;
     let dbCollection: {
@@ -31,25 +31,26 @@ describe("Explore the outer rims of permission / groups", () => {
 
     before(async () => {
         mongoClient = await new MongoClient(MongoDbTestServer.uri).connect();
-        config = await ConfigLoader.load("gibbons-mongodb-sample");
+        config = await ConfigLoader.load('gibbons-mongodb-sample');
 
         dbCollection = {
             user: mongoClient
                 .db(config.dbStructure.user.dbName)
-                .collection<TestUser>(config.dbStructure.user.collection),
+                .collection<TestUser>(config.dbStructure.user.collectionName),
             group: mongoClient
                 .db(config.dbStructure.group.dbName)
-                .collection<TestGroup>(config.dbStructure.group.collection),
+                .collection<TestGroup>(config.dbStructure.group.collectionName),
             permission: mongoClient
                 .db(config.dbStructure.permission.dbName)
                 .collection<TestPermission>(
-                    config.dbStructure.permission.collection
+                    config.dbStructure.permission.collectionName
                 ),
         };
         const mongoDbSeeder = new MongoDbSeeder(mongoClient, config);
         await mongoDbSeeder.initialise();
 
-        mongoDbAdapter = new GibbonsMongoDb(mongoClient, config);
+        mongoDbAdapter = new GibbonsMongoDb(MongoDbTestServer.uri, config);
+        await mongoDbAdapter.initialize();
 
         // Test fixtures
         await seedTestFixtures(mongoClient, config);
@@ -75,7 +76,7 @@ describe("Explore the outer rims of permission / groups", () => {
         await mongoClient.close();
     });
 
-    describe("No permissions left", () => {
+    describe('No permissions left', () => {
         before(async () => {
             // Set all permissions as allocated
             await dbCollection.permission.updateMany(
@@ -92,24 +93,24 @@ describe("Explore the outer rims of permission / groups", () => {
 
         it(`Try to allocate a permission, but there isn't any left`, async () => {
             const permission = {
-                name: "Where no man has gone before",
+                name: 'Where no man has gone before',
             } as TestPermission;
 
             const throwsError = async () =>
                 mongoDbAdapter.allocatePermission(permission);
 
             await expect(throwsError()).to.be.rejectedWith(
-                "Not able to allocate permission, seems all permissions are allocated"
+                'Not able to allocate permission, seems all permissions are allocated'
             );
         });
 
         it(`Try to allocate a group, but there isn't any left`, async () => {
             const data = {
-                name: "Where no man has gone before",
+                name: 'Where no man has gone before',
             } as TestGroup;
             const throwsError = async () => mongoDbAdapter.allocateGroup(data);
             await expect(throwsError()).to.be.rejectedWith(
-                "Not able to allocate group, seems all groups are allocated"
+                'Not able to allocate group, seems all groups are allocated'
             );
         });
     });

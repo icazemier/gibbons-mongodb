@@ -1,19 +1,21 @@
-import { Gibbon } from "@icazemier/gibbons";
-import { Binary, Collection, Filter, FindCursor, MongoClient } from "mongodb";
-import PQueue from "p-queue";
-import { IGibbonUser } from "interfaces/gibbon-user.js";
-import { IPermissionsResource } from "interfaces/permissions-resource.js";
-import { GibbonModel } from "./gibbon-model.js";
-import { Config } from "interfaces/config.js";
+import { Gibbon } from '@icazemier/gibbons';
+import { Binary, Collection, Filter, FindCursor } from 'mongodb';
+import { IGibbonUser } from 'interfaces/gibbon-user.js';
+import { IPermissionsResource } from 'interfaces/permissions-resource.js';
+import { GibbonModel } from './gibbon-model.js';
+import { GibbonLike } from 'interfaces/gibbon-like.js';
 
 export class GibbonUser extends GibbonModel {
-    protected dbCollection: Collection<IGibbonUser>;
+    protected dbCollection!: Collection<IGibbonUser>;
 
-    constructor(mongoClient: MongoClient, config: Config) {
-        super(mongoClient, config);
-        const { dbName, collection } = config.dbStructure.user;
-
-        this.dbCollection = mongoClient.db(dbName).collection(collection);
+    async initialize(structure: {
+        dbName: string;
+        collectionName: string;
+    }): Promise<void> {
+        const { dbName, collectionName } = structure;
+        this.dbCollection = this.mongoClient
+            .db(dbName)
+            .collection(collectionName);
     }
 
     /**
@@ -43,24 +45,25 @@ export class GibbonUser extends GibbonModel {
      */
     protected static mapPermissionsBinaryToGibbon<T extends IGibbonUser>(
         user: T
-    ): T {
-        const transformedUser = { ...user };
+    ): IGibbonUser {
+        const { buffer: permissionBuffer } = user.permissionsGibbon as Binary;
+        const { buffer: groupBuffer } = user.groupsGibbon as Binary;
 
-        const { buffer: permissionBuffer } =
-            transformedUser.permissionsGibbon as Binary;
-        const { buffer: groupBuffer } = transformedUser.groupsGibbon as Binary;
-
-        transformedUser.permissionsGibbon = Gibbon.decode(permissionBuffer);
-        transformedUser.groupsGibbon = Gibbon.decode(groupBuffer);
-
-        return transformedUser;
+        return {
+            ...user,
+            ...{
+                permissionsGibbon: Gibbon.decode(permissionBuffer),
+                groupsGibbon: Gibbon.decode(groupBuffer),
+            },
+        };
     }
 
     /**
      * Tries to fetch users by permissions
      */
-    findByPermissions(permissions: Gibbon): FindCursor<IGibbonUser> {
-        const $bitsAnySet = permissions.encode() as Buffer;
+    findByPermissions(permissions: GibbonLike): FindCursor<IGibbonUser> {
+        const $bitsAnySet = this.ensureGibbon(permissions).encode() as Buffer;
+
         const filter = {
             permissionsGibbon: {
                 $bitsAnySet,
@@ -77,13 +80,15 @@ export class GibbonUser extends GibbonModel {
      *
      * @see {@link https://mongodb.github.io/node-mongodb-native/4.2/classes/FindCursor.html | FindCursor}
      *
-     * @param {Gibbon | Array<number> | Buffer} gibbon - representing groups
-     * @returns {FindCursor<Document>} Collection of found users
+     * @param gibbon - representing groups
+     * @returns Collection of found users
      */
-    findByGroups(groups: Gibbon): FindCursor<IGibbonUser> {
+    findByGroups(groups: GibbonLike): FindCursor<IGibbonUser> {
+        const $bitsAnySet = this.ensureGibbon(groups).encode() as Buffer;
+
         const filter = {
             groupsGibbon: {
-                $bitsAnySet: groups.encode() as Buffer,
+                $bitsAnySet,
             },
         };
 
@@ -96,19 +101,17 @@ export class GibbonUser extends GibbonModel {
      * Searches for permissions and sets them to logical `false`
      * @param permissionsToUnset
      */
-    async unsetPermissions(permissionsToUnset: Gibbon) {
-        const permissionsBufferToUnset = permissionsToUnset.encode() as Buffer;
+    async unsetPermissions(permissions: GibbonLike) {
+        const permissionsToUnset = this.ensureGibbon(permissions);
         const permissionPositionsToUnset =
             permissionsToUnset.getPositionsArray();
 
-        const userUpdateQueue = new PQueue({
-            concurrency: this.config.mongoDbMutationConcurrency,
-        });
         // Loop through all users check if there are any positions, then
         // be sure to unset these permissions
+        const $bitsAnySet = permissionsToUnset.encode() as Buffer;
         const userFilter = {
             permissionsGibbon: {
-                $bitsAnySet: permissionsBufferToUnset,
+                $bitsAnySet,
             },
         };
 
@@ -123,26 +126,13 @@ export class GibbonUser extends GibbonModel {
             ).unsetAllFromPositions(permissionPositionsToUnset);
 
             // Update permissions in this group
-            const updatePromise = this.dbCollection.updateOne(user, {
+            await this.dbCollection.updateOne(user, {
                 $set: {
                     permissionsGibbon: gibbon.encode(),
                 },
             });
-            userUpdateQueue.add(async () => updatePromise);
-            // Throttle queue
-            if (userUpdateQueue.size > userUpdateQueue.concurrency) {
-                await userUpdateQueue.onSizeLessThan(
-                    Math.ceil(userUpdateQueue.concurrency / 2)
-                );
-            }
         }
-
-        await Promise.all([
-            // Wait until queue is done executing
-            userUpdateQueue.onIdle(),
-            // Close cursors gracefully
-            userCursor.close(),
-        ]);
+        await userCursor.close();
     }
 
     /**
@@ -153,15 +143,12 @@ export class GibbonUser extends GibbonModel {
      * @param permissionsResource
      */
     async unsetGroups(
-        groups: Gibbon,
+        groups: GibbonLike,
         permissionsResource: IPermissionsResource
     ): Promise<void> {
-        const groupsToDeallocateBuffer = groups.encode() as Buffer;
-        const positionsToDeallocate = groups.getPositionsArray();
-
-        const userUpdateQueue = new PQueue({
-            concurrency: this.config.mongoDbMutationConcurrency,
-        });
+        const groupsToUnset = this.ensureGibbon(groups);
+        const groupsToDeallocateBuffer = groupsToUnset.encode() as Buffer;
+        const positionsToDeallocate = groupsToUnset.getPositionsArray();
 
         const filter = {
             groupsGibbon: {
@@ -189,7 +176,7 @@ export class GibbonUser extends GibbonModel {
                 );
 
             // Update groups and corresponding permissions for this user
-            const updatePromise = this.dbCollection.updateOne(
+            await this.dbCollection.updateOne(
                 { _id },
                 {
                     $set: {
@@ -198,37 +185,20 @@ export class GibbonUser extends GibbonModel {
                     },
                 }
             );
-            userUpdateQueue.add(async () => updatePromise);
-            // Throttle queue
-            if (userUpdateQueue.size > userUpdateQueue.concurrency) {
-                await userUpdateQueue.onSizeLessThan(
-                    Math.ceil(userUpdateQueue.concurrency / 2)
-                );
-            }
         }
-
-        await Promise.all([
-            // Wait until queue is done executing
-            userUpdateQueue.onIdle(),
-            // Close cursors gracefully
-            userCursor.close(),
-        ]);
+        await userCursor.close();
     }
 
     /**
      * Retrieve users and their current group membership, patch given groups and update their aggregated permissions
-     * @param {Filter<Document>} filter
-     * @param {Array<number>} groups
+     * @param filter
+     * @param groups
      */
     async subscribeToGroupsAndPermissions(
         filter: Filter<IGibbonUser>,
         groups: Gibbon,
         permissions: Gibbon
     ): Promise<void> {
-        const userUpdateQueue = new PQueue({
-            concurrency: this.config.mongoDbMutationConcurrency,
-        });
-
         const userCursor = this.dbCollection.find(filter);
 
         for await (const user of userCursor) {
@@ -236,7 +206,7 @@ export class GibbonUser extends GibbonModel {
             const { buffer: permissionsBuffer } =
                 user.permissionsGibbon as Binary;
 
-            const updatePromise = this.dbCollection.updateOne(user, {
+            await this.dbCollection.updateOne(user, {
                 $set: {
                     groupsGibbon: Gibbon.decode(groupsBuffer)
                         .mergeWithGibbon(groups)
@@ -246,22 +216,8 @@ export class GibbonUser extends GibbonModel {
                         .encode(),
                 },
             });
-
-            userUpdateQueue.add(async () => updatePromise);
-            // Throttle queue
-            if (userUpdateQueue.size > userUpdateQueue.concurrency) {
-                await userUpdateQueue.onSizeLessThan(
-                    Math.ceil(userUpdateQueue.concurrency / 2)
-                );
-            }
         }
-
-        await Promise.all([
-            // Wait until queue is done executing
-            userUpdateQueue.onIdle(),
-            // Close cursors gracefully
-            userCursor.close(),
-        ]);
+        await userCursor.close();
     }
 
     /**
@@ -273,10 +229,6 @@ export class GibbonUser extends GibbonModel {
         groups: Gibbon,
         permissions: Gibbon
     ): Promise<void> {
-        const userUpdateQueue = new PQueue({
-            concurrency: this.config.mongoDbMutationConcurrency,
-        });
-
         const filter = {
             groupsGibbon: {
                 $bitsAnySet: groups.encode() as Buffer,
@@ -293,7 +245,7 @@ export class GibbonUser extends GibbonModel {
             const { _id, permissionsGibbon } = user;
             const { buffer: permissionsBuffer } = permissionsGibbon as Binary;
 
-            const updatePromise = this.dbCollection.updateOne(
+            await this.dbCollection.updateOne(
                 { _id },
                 {
                     $set: {
@@ -303,21 +255,7 @@ export class GibbonUser extends GibbonModel {
                     },
                 }
             );
-
-            userUpdateQueue.add(async () => updatePromise);
-            // Throttle queue
-            if (userUpdateQueue.size > userUpdateQueue.concurrency) {
-                await userUpdateQueue.onSizeLessThan(
-                    Math.ceil(userUpdateQueue.concurrency / 2)
-                );
-            }
         }
-
-        await Promise.all([
-            // Wait until queue is done executing
-            userUpdateQueue.onIdle(),
-            // Close cursors gracefully
-            userCursor.close(),
-        ]);
+        await userCursor.close();
     }
 }

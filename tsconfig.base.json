@@ -1,0 +1,24 @@
+{
+    "compilerOptions": {
+        "allowSyntheticDefaultImports": true,
+        "baseUrl": "./src",
+        "module": "node16",
+        "preserveConstEnums": true,
+        "declaration": true,
+        "declarationMap": true,
+        "esModuleInterop": true,
+        "experimentalDecorators": true,
+        "forceConsistentCasingInFileNames": true,
+        "target": "ES2022",
+        "moduleResolution": "node16",
+        "noImplicitReturns": true,
+        "noUnusedLocals": true,
+        "sourceMap": true,
+        "skipLibCheck": true,
+        "strict": true,
+        "types": ["node", "mocha"],
+        "outDir": "./build/esm"
+    },
+    "include": ["src"],
+    "lib": ["es2022"]
+}

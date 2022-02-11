@@ -1,6 +1,6 @@
-import { cosmiconfig } from "cosmiconfig";
-import { CosmiconfigResult } from "cosmiconfig/dist/types";
-import { Config } from "./interfaces/config.js";
+import { cosmiconfig } from 'cosmiconfig';
+import { CosmiconfigResult } from 'cosmiconfig/dist/types.js';
+import { Config } from './interfaces/config.js';
 
 export class ConfigLoader {
     /**
@@ -14,10 +14,10 @@ export class ConfigLoader {
      * @public
      */
     public static async load(
-        module = "gibbons-mongodb",
+        module = 'gibbons-mongodb',
         filepath?: string
     ): Promise<Config> {
-        const explorer = cosmiconfig(module || "gibbons-mongodb");
+        const explorer = cosmiconfig(module || 'gibbons-mongodb');
 
         const configResult = (
             filepath ? await explorer.load(filepath) : await explorer.search()
@@ -25,7 +25,7 @@ export class ConfigLoader {
 
         if (!configResult?.config) {
             throw new Error(
-                "Could not load config, execute `npx gibbons-mongodb init`"
+                'Could not load config, execute `npx gibbons-mongodb init`'
             );
         }
         const { config } = configResult;

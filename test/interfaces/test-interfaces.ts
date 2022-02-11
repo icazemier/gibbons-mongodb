@@ -2,7 +2,7 @@ import {
     IGibbonGroup,
     IGibbonPermission,
     IGibbonUser,
-} from "../../src/interfaces";
+} from '../../src/interfaces/index.js';
 
 export interface TestUser extends IGibbonUser {
     email: string;

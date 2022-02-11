@@ -1,7 +1,6 @@
-import { ObjectId } from "mongodb";
+import { Document } from 'mongodb';
 
-export interface IGibbonPermission {
-    _id: ObjectId;
+export interface IGibbonPermission extends Document {
     gibbonPermissionPosition: number;
     gibbonIsAllocated: boolean;
 }

@@ -1,6 +1,6 @@
-import { MongoClient } from "mongodb";
-import { ConfigLoader } from "../config.js";
-import { MongoDbSeeder } from "../seeder.js";
+import { MongoClient } from 'mongodb';
+import { ConfigLoader } from '../config.js';
+import { MongoDbSeeder } from '../seeder.js';
 
 export const init = async (argv: {
     [x: string]: unknown;
@@ -14,7 +14,7 @@ export const init = async (argv: {
     const { uri, config: configFile } = argv;
 
     const mongoClient = await new MongoClient(uri).connect();
-    const config = await ConfigLoader.load("gibbons-mongodb", configFile);
+    const config = await ConfigLoader.load('gibbons-mongodb', configFile);
     const mongoDbSeeder = new MongoDbSeeder(mongoClient, config);
     await mongoDbSeeder.initialise();
     await mongoClient.close();

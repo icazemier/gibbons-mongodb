@@ -1,5 +1,4 @@
 export class Utils {
-
     /**
      * Generates a sequence 1 - n (amount) to use as async generator
      * @param {number} amount
@@ -25,5 +24,4 @@ export class Utils {
             },
         };
     }
-
 }

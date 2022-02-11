@@ -1,26 +1,26 @@
-import { expect } from "chai";
-import { MongoClient } from "mongodb";
+import { expect } from 'chai';
+import { MongoClient } from 'mongodb';
 import {
     seedTestFixtures,
     seedUserTestFixtures,
     tearDownGroupTestFixtures,
     tearDownPermissionTestFixtures,
     tearDownUserTestFixtures,
-} from "../test/helper/seeders.js";
-import { MongoDbTestServer } from "../test/helper/mongodb-test-server.js";
+} from '../test/helper/seeders.js';
+import { MongoDbTestServer } from '../test/helper/mongodb-memory-server.js';
 
-import { ConfigLoader } from "../src/config.js";
-import { MongoDbSeeder } from "../src/seeder.js";
-import { Config } from "./interfaces/index.js";
+import { ConfigLoader } from '../src/config.js';
+import { MongoDbSeeder } from '../src/seeder.js';
+import { Config } from './interfaces/index.js';
 
-describe("Unhappy flows mongo db seeder", () => {
+describe('Unhappy flows mongo db seeder', () => {
     let mongoClient: MongoClient;
     let mongoDbSeeder: MongoDbSeeder;
     let config: Config;
 
     before(async () => {
         mongoClient = await new MongoClient(MongoDbTestServer.uri).connect();
-        config = await ConfigLoader.load("gibbons-mongodb-sample");
+        config = await ConfigLoader.load('gibbons-mongodb-sample');
 
         mongoDbSeeder = new MongoDbSeeder(mongoClient, config);
         await mongoDbSeeder.initialise();
@@ -45,7 +45,7 @@ describe("Unhappy flows mongo db seeder", () => {
         const throwsError = async () => mongoDbSeeder.initialise();
 
         await expect(throwsError()).to.be.rejectedWith(
-            "Called populateGroupsAndPermissions, but permissions and groups seem to be populated already"
+            'Called populateGroupsAndPermissions, but permissions and groups seem to be populated already'
         );
     });
 });

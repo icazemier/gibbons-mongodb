@@ -1,11 +1,12 @@
-import { MongoClient } from "mongodb";
-import { Gibbon } from "@icazemier/gibbons";
-import PQueue from "p-queue";
-import { Config, DbCollection } from "interfaces/config.js";
-import { IGibbonGroup } from "interfaces/gibbon-group.js";
-import { IGibbonPermission } from "interfaces/gibbon-permission.js";
-import { IGibbonUser } from "interfaces/gibbon-user.js";
-import { Utils } from "./utils.js";
+import { MongoClient } from 'mongodb';
+import { Gibbon } from '@icazemier/gibbons';
+import { Config, DbCollection } from 'interfaces/config.js';
+import {
+    IGibbonGroup,
+    IGibbonPermission,
+    IGibbonUser,
+} from 'interfaces/index.js';
+import { Utils } from './utils.js';
 
 /**
  * This class is meant to be used when one needs to prepare the Mongo Database with groups and permissions
@@ -19,14 +20,14 @@ export class MongoDbSeeder {
         // map collections for convenience
         const user = mongoClient
             .db(config.dbStructure.user.dbName)
-            .collection<IGibbonUser>(config.dbStructure.user.collection);
+            .collection<IGibbonUser>(config.dbStructure.user.collectionName);
         const group = mongoClient
             .db(config.dbStructure.group.dbName)
-            .collection<IGibbonGroup>(config.dbStructure.group.collection);
+            .collection<IGibbonGroup>(config.dbStructure.group.collectionName);
         const permission = mongoClient
             .db(config.dbStructure.permission.dbName)
             .collection<IGibbonPermission>(
-                config.dbStructure.permission.collection
+                config.dbStructure.permission.collectionName
             );
 
         this.config = config;
@@ -40,10 +41,6 @@ export class MongoDbSeeder {
      * @private
      */
     protected async populateGroups(): Promise<void> {
-        const queue = new PQueue({
-            concurrency: this.config.mongoDbMutationConcurrency,
-        });
-
         for await (const seq of Utils.sequenceGenerator(
             this.config.groupByteLength * 8
         )) {
@@ -56,16 +53,8 @@ export class MongoDbSeeder {
                 gibbonIsAllocated: false,
             };
 
-            // Push task to queue
-            queue.add(async () => this.dbCollection.group.insertOne(data));
-
-            // Throttle traffic towards MongoDB if needed
-            if (queue.size > queue.concurrency) {
-                await queue.onSizeLessThan(Math.ceil(queue.concurrency / 2));
-            }
+            await this.dbCollection.group.insertOne(data);
         }
-        // Wait until queue is done executing
-        await queue.onIdle();
     }
 
     /**
@@ -75,10 +64,6 @@ export class MongoDbSeeder {
      * @private
      */
     private async populatePermissions(): Promise<void> {
-        const queue = new PQueue({
-            concurrency: this.config.mongoDbMutationConcurrency,
-        });
-
         for await (const seq of Utils.sequenceGenerator(
             this.config.permissionByteLength * 8
         )) {
@@ -88,16 +73,8 @@ export class MongoDbSeeder {
                 gibbonIsAllocated: false,
             };
 
-            // Push task to queue
-            queue.add(async () => this.dbCollection.permission.insertOne(data));
-
-            // Throttle traffic towards MongoDB if needed
-            if (queue.size > queue.concurrency) {
-                await queue.onSizeLessThan(Math.ceil(queue.concurrency / 2));
-            }
+            await this.dbCollection.permission.insertOne(data);
         }
-        // Wait until queue is done executing
-        await queue.onIdle();
     }
 
     /**

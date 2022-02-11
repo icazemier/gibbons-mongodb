@@ -1,34 +1,51 @@
-import { Gibbon } from "@icazemier/gibbons";
-import { Document, Filter, FindCursor, MongoClient } from "mongodb";
+import { Gibbon } from '@icazemier/gibbons';
+import { Document, Filter, FindCursor, MongoClient } from 'mongodb';
 
 import {
     Config,
+    GibbonLike,
     IGibbonGroup,
     IGibbonPermission,
     IGibbonUser,
     IPermissionsResource,
-} from "./interfaces/index.js";
+} from './interfaces/index.js';
 
-import { GibbonUser, GibbonGroup, GibbonPermission } from "./models/index.js";
+import { GibbonUser, GibbonGroup, GibbonPermission } from './models/index.js';
 
 /**
  * Class which does all the "heavy" lifting against MongDB
  *
  */
 export class GibbonsMongoDb implements IPermissionsResource {
-    protected gibbonGroup: GibbonGroup;
-    protected gibbonPermission: GibbonPermission;
-    protected gibbonUser: GibbonUser;
+    protected gibbonGroup!: GibbonGroup;
+    protected gibbonPermission!: GibbonPermission;
+    protected gibbonUser!: GibbonUser;
 
     /**
      *
      * @param mongoClient
      * @param config
      */
-    constructor(mongoClient: MongoClient, config: Config) {
-        this.gibbonUser = new GibbonUser(mongoClient, config);
+    constructor(protected mongoUri: string, protected config: Config) {}
+
+    async initialize(): Promise<void> {
+        const { mongoUri, config } = this;
+
+        const mongoClient = await MongoClient.connect(mongoUri);
+
+        this.gibbonUser = new GibbonUser(mongoClient);
         this.gibbonPermission = new GibbonPermission(mongoClient, config);
         this.gibbonGroup = new GibbonGroup(mongoClient, config);
+
+        const {
+            dbStructure: { group, permission, user },
+        } = config;
+
+        await Promise.all([
+            this.gibbonUser.initialize(group),
+            this.gibbonPermission.initialize(permission),
+            this.gibbonGroup.initialize(user),
+        ]);
     }
 
     /**
@@ -37,12 +54,8 @@ export class GibbonsMongoDb implements IPermissionsResource {
      *
      * @param groups
      */
-    async getPermissionsGibbonForGroups(
-        groups: Gibbon | Array<number> | Buffer
-    ): Promise<Gibbon> {
-        return this.gibbonGroup.getPermissionsGibbonForGroups(
-            GibbonGroup.ensureGibbon(groups)
-        );
+    async getPermissionsGibbonForGroups(groups: GibbonLike): Promise<Gibbon> {
+        return this.gibbonGroup.getPermissionsGibbonForGroups(groups);
     }
 
     /**
@@ -51,10 +64,8 @@ export class GibbonsMongoDb implements IPermissionsResource {
      * @param groups Contains group positions to query for
      * @returns A MongoDB FindCursor
      */
-    public findGroups(
-        groups: Gibbon | Array<number> | Buffer
-    ): FindCursor<IGibbonGroup> {
-        return this.gibbonGroup.find(GibbonGroup.ensureGibbon(groups));
+    public findGroups(groups: GibbonLike): FindCursor<IGibbonGroup> {
+        return this.gibbonGroup.find(groups);
     }
 
     /**
@@ -65,13 +76,10 @@ export class GibbonsMongoDb implements IPermissionsResource {
      * @returns groups Cursor
      */
     findGroupsByPermissions(
-        permissions: Gibbon | Array<number> | Buffer,
+        permissions: GibbonLike,
         allocated = true
     ): FindCursor<IGibbonGroup> {
-        return this.gibbonGroup.findByPermissions(
-            GibbonGroup.ensureGibbon(permissions),
-            allocated
-        );
+        return this.gibbonGroup.findByPermissions(permissions, allocated);
     }
 
     /**
@@ -80,12 +88,8 @@ export class GibbonsMongoDb implements IPermissionsResource {
      * @param permissions Permissions to query for
      * @returns users Cursor
      */
-    findUsersByPermissions(
-        permissions: Gibbon | Array<number> | Buffer
-    ): FindCursor<IGibbonUser> {
-        return this.gibbonUser.findByPermissions(
-            GibbonPermission.ensureGibbon(permissions)
-        );
+    findUsersByPermissions(permissions: GibbonLike): FindCursor<IGibbonUser> {
+        return this.gibbonUser.findByPermissions(permissions);
     }
 
     /**
@@ -94,10 +98,8 @@ export class GibbonsMongoDb implements IPermissionsResource {
      * @param groups Groups to query for
      * @returns users Cursor
      */
-    findUsersByGroups(
-        groups: Gibbon | Array<number> | Buffer
-    ): FindCursor<IGibbonUser> {
-        return this.gibbonUser.findByGroups(GibbonGroup.ensureGibbon(groups));
+    findUsersByGroups(groups: GibbonLike): FindCursor<IGibbonUser> {
+        return this.gibbonUser.findByGroups(groups);
     }
 
     /**
@@ -117,16 +119,13 @@ export class GibbonsMongoDb implements IPermissionsResource {
      * - Deallocates permission and sets them to default values
      * - Removes related permissions from groups and users
      *
-     * @param {Gibbon | Array<number> | Buffer} permissions - Permission position collection
+     * @param permissions - Permission position collection
      * @returns {Promise<void>}
      */
-    async deallocatePermissions(
-        permissions: Gibbon | Array<number> | Buffer
-    ): Promise<void> {
-        const permissionGibbon = GibbonGroup.ensureGibbon(permissions);
-        await this.gibbonPermission.deallocate(permissionGibbon);
-        await this.gibbonGroup.unsetPermissions(permissionGibbon);
-        await this.gibbonUser.unsetPermissions(permissionGibbon);
+    async deallocatePermissions(permissions: GibbonLike): Promise<void> {
+        await this.gibbonPermission.deallocate(permissions);
+        await this.gibbonGroup.unsetPermissions(permissions);
+        await this.gibbonUser.unsetPermissions(permissions);
     }
 
     /**
@@ -162,7 +161,9 @@ export class GibbonsMongoDb implements IPermissionsResource {
      * @param data Anything really, at least MongoDB compatible
      * @returns Created group
      */
-    async allocateGroup<T>(data: T): Promise<IGibbonGroup> {
+    async allocateGroup<OmitGibbonGroupPosition>(
+        data: OmitGibbonGroupPosition
+    ): Promise<IGibbonGroup> {
         return this.gibbonGroup.allocate(data);
     }
 
@@ -170,15 +171,11 @@ export class GibbonsMongoDb implements IPermissionsResource {
      * Resets default values to each given group, then
      * it removes membership from each user for these groups
      *
-     * @param { Gibbon | Array<number> | Buffer} groups - Group positions collection
-     * @returns {Promise<void>}
+     * @param groups - Group positions collection
      */
-    async deallocateGroups(
-        groups: Gibbon | Array<number> | Buffer
-    ): Promise<void> {
-        const groupsGibbon = GibbonGroup.ensureGibbon(groups);
-        await this.gibbonGroup.deallocate(groupsGibbon);
-        await this.gibbonUser.unsetGroups(groupsGibbon, this);
+    async deallocateGroups(groups: GibbonLike): Promise<void> {
+        await this.gibbonGroup.deallocate(groups);
+        await this.gibbonUser.unsetGroups(groups, this);
     }
 
     /**
@@ -186,14 +183,13 @@ export class GibbonsMongoDb implements IPermissionsResource {
      *
      * @param userGroups User groups
      * @param groups Groups to compare with
-     * @returns {boolean}
      */
-    static validateUserGroupsForAllGroups(
-        userGroups: Gibbon | Array<number> | Buffer,
-        groups: Gibbon | Array<number> | Buffer
+    validateUserGroupsForAllGroups(
+        userGroups: GibbonLike,
+        groups: GibbonLike
     ): boolean {
-        const userGroupsGibbon = GibbonGroup.ensureGibbon(userGroups);
-        const groupsGibbon = GibbonGroup.ensureGibbon(groups);
+        const userGroupsGibbon = this.gibbonGroup.ensureGibbon(userGroups);
+        const groupsGibbon = this.gibbonGroup.ensureGibbon(groups);
         return userGroupsGibbon.hasAllFromGibbon(groupsGibbon);
     }
 
@@ -203,12 +199,12 @@ export class GibbonsMongoDb implements IPermissionsResource {
      * @param userGroups User groups
      * @param groups Groups to compare with
      */
-    static validateUserGroupsForAnyGroups(
-        userGroups: Gibbon | Array<number> | Buffer,
-        groups: Gibbon | Array<number> | Buffer
-    ) {
-        const userGroupsGibbon = GibbonGroup.ensureGibbon(userGroups);
-        const groupsGibbon = GibbonGroup.ensureGibbon(groups);
+    validateUserGroupsForAnyGroups(
+        userGroups: GibbonLike,
+        groups: GibbonLike
+    ): boolean {
+        const userGroupsGibbon = this.gibbonGroup.ensureGibbon(userGroups);
+        const groupsGibbon = this.gibbonGroup.ensureGibbon(groups);
         return userGroupsGibbon.hasAnyFromGibbon(groupsGibbon);
     }
 
@@ -218,13 +214,14 @@ export class GibbonsMongoDb implements IPermissionsResource {
      * @param userPermissions User permissions
      * @param permissions Permissions to compare with
      */
-    async validateUserPermissionsForAllPermissions(
-        userPermissions: Gibbon | Array<number> | Buffer,
-        permissions: Gibbon | Array<number> | Buffer
-    ) {
+    validateUserPermissionsForAllPermissions(
+        userPermissions: GibbonLike,
+        permissions: GibbonLike
+    ): boolean {
         const userPermissionsGibbon =
-            GibbonPermission.ensureGibbon(userPermissions);
-        const permissionsGibbon = GibbonPermission.ensureGibbon(permissions);
+            this.gibbonPermission.ensureGibbon(userPermissions);
+        const permissionsGibbon =
+            this.gibbonPermission.ensureGibbon(permissions);
         return userPermissionsGibbon.hasAllFromGibbon(permissionsGibbon);
     }
 
@@ -234,13 +231,14 @@ export class GibbonsMongoDb implements IPermissionsResource {
      * @paramuserPermissions User permissions
      * @param permissions To compare with
      */
-    public async validateUserPermissionsForAnyPermissions(
-        userPermissions: Gibbon | Array<number> | Buffer,
-        permissions: Gibbon | Array<number> | Buffer
-    ): Promise<boolean> {
+    validateUserPermissionsForAnyPermissions(
+        userPermissions: GibbonLike,
+        permissions: GibbonLike
+    ): boolean {
         const userPermissionsGibbon =
-            GibbonPermission.ensureGibbon(userPermissions);
-        const permissionsGibbon = GibbonPermission.ensureGibbon(permissions);
+            this.gibbonPermission.ensureGibbon(userPermissions);
+        const permissionsGibbon =
+            this.gibbonPermission.ensureGibbon(permissions);
         return userPermissionsGibbon.hasAnyFromGibbon(permissionsGibbon);
     }
 
@@ -251,13 +249,10 @@ export class GibbonsMongoDb implements IPermissionsResource {
      * @param allocated=true search for allocated or non allocated
      */
     public async validateAllocatedGroups(
-        groups: Gibbon | Array<number> | Buffer,
+        groups: GibbonLike,
         allocated = true
     ): Promise<boolean> {
-        return this.gibbonGroup.validate(
-            GibbonGroup.ensureGibbon(groups),
-            allocated
-        );
+        return this.gibbonGroup.validate(groups, allocated);
     }
 
     /**
@@ -266,13 +261,10 @@ export class GibbonsMongoDb implements IPermissionsResource {
      * @param permissions
      */
     public async validateAllocatedPermissions(
-        permissions: Gibbon | Array<number> | Buffer,
+        permissions: GibbonLike,
         allocated = true
     ): Promise<boolean> {
-        return this.gibbonPermission.validate(
-            GibbonPermission.ensureGibbon(permissions),
-            allocated
-        );
+        return this.gibbonPermission.validate(permissions, allocated);
     }
 
     /**
@@ -282,10 +274,9 @@ export class GibbonsMongoDb implements IPermissionsResource {
      */
     async subscribeUsersToGroups(
         filter: Filter<Document>,
-        groups: Gibbon | Array<number> | Buffer
+        groups: GibbonLike
     ): Promise<void> {
-        const groupsGibbon = GibbonGroup.ensureGibbon(groups);
-
+        const groupsGibbon = this.gibbonGroup.ensureGibbon(groups);
         const valid = await this.gibbonGroup.validate(groupsGibbon);
 
         if (!valid) {
@@ -313,11 +304,12 @@ export class GibbonsMongoDb implements IPermissionsResource {
      * @throws Error when given groups or permissions are not allocated
      */
     async subscribePermissionsToGroups(
-        groups: Gibbon | Array<number> | Buffer,
-        permissions: Gibbon | Array<number> | Buffer
+        groups: GibbonLike,
+        permissions: GibbonLike
     ): Promise<void> {
-        const groupsGibbon = GibbonGroup.ensureGibbon(groups);
-        const permissionGibbon = GibbonPermission.ensureGibbon(permissions);
+        const groupsGibbon = this.gibbonGroup.ensureGibbon(groups);
+        const permissionGibbon =
+            this.gibbonPermission.ensureGibbon(permissions);
 
         // Validate to ensure groups and permissions are allocated
         const [permissionsValid, groupsValid] = await Promise.all([

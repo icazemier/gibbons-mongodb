@@ -1,4 +1,4 @@
-import { Gibbon } from "@icazemier/gibbons";
+import { Gibbon } from '@icazemier/gibbons';
 
 enum GROUP_POSITION_FIXTURES {
     GI_JOE = 1,
@@ -17,24 +17,24 @@ enum PERMISSION_POSITIONS_FIXTURES {
 
 const usersFixtures = [
     {
-        email: "info@arnieslife.com",
-        name: "Arnold Schwarzenegger",
+        email: 'info@arnieslife.com',
+        name: 'Arnold Schwarzenegger',
         groupsGibbon: Gibbon.create(1024)
             .setPosition(GROUP_POSITION_FIXTURES.A_TEAM)
             .encode() as Buffer,
         permissionsGibbon: Buffer.alloc(1),
     },
     {
-        email: "info@knightrideronline.com",
-        name: "Michael Knight",
+        email: 'info@knightrideronline.com',
+        name: 'Michael Knight',
         groupsGibbon: Gibbon.create(1024)
             .setPosition(GROUP_POSITION_FIXTURES.TRANSFORMERS)
             .encode() as Buffer,
         permissionsGibbon: Buffer.alloc(1),
     },
     {
-        email: "captain@planet.nl",
-        name: "Captain Planet",
+        email: 'captain@planet.nl',
+        name: 'Captain Planet',
         groupsGibbon: Gibbon.create(1024)
             .setAllFromPositions([
                 GROUP_POSITION_FIXTURES.GI_JOE,
@@ -44,16 +44,16 @@ const usersFixtures = [
         permissionsGibbon: Buffer.alloc(1),
     },
     {
-        email: "mankind@earth.born",
-        name: "Cooper",
+        email: 'mankind@earth.born',
+        name: 'Cooper',
         groupsGibbon: Gibbon.create(1024)
             .setPosition(GROUP_POSITION_FIXTURES.PLANETEERS)
             .encode() as Buffer,
         permissionsGibbon: Buffer.alloc(1),
     },
     {
-        email: "john@doe.born",
-        name: "John",
+        email: 'john@doe.born',
+        name: 'John',
         // No group, means no permissions ;)
         groupsGibbon: Gibbon.create(1024).encode() as Buffer,
         permissionsGibbon: Buffer.alloc(1),
@@ -62,7 +62,7 @@ const usersFixtures = [
 
 const groupsFixtures = [
     {
-        name: "GI Joe",
+        name: 'GI Joe',
         permissionsGibbon: Gibbon.create(1024)
             .setPosition(PERMISSION_POSITIONS_FIXTURES.GOD_MODE)
             .encode() as Buffer,
@@ -78,7 +78,7 @@ const groupsFixtures = [
         gibbonIsAllocated: true,
     },
     {
-        name: "A-Team",
+        name: 'A-Team',
         permissionsGibbon: Gibbon.create(1024)
             .setAllFromPositions([
                 PERMISSION_POSITIONS_FIXTURES.USER,
@@ -89,7 +89,7 @@ const groupsFixtures = [
         gibbonIsAllocated: true,
     },
     {
-        name: "Planeteers",
+        name: 'Planeteers',
         permissionsGibbon: Gibbon.create(1024)
             .setAllFromPositions([
                 PERMISSION_POSITIONS_FIXTURES.USER,
@@ -103,27 +103,27 @@ const groupsFixtures = [
 
 const permissionsFixtures = [
     {
-        name: "God mode",
+        name: 'God mode',
         gibbonPermissionPosition: PERMISSION_POSITIONS_FIXTURES.GOD_MODE,
         gibbonIsAllocated: true,
     },
     {
-        name: "Admin",
+        name: 'Admin',
         gibbonPermissionPosition: PERMISSION_POSITIONS_FIXTURES.ADMIN,
         gibbonIsAllocated: true,
     },
     {
-        name: "User",
+        name: 'User',
         gibbonPermissionPosition: PERMISSION_POSITIONS_FIXTURES.USER,
         gibbonIsAllocated: true,
     },
     {
-        name: "Back door",
+        name: 'Back door',
         gibbonPermissionPosition: PERMISSION_POSITIONS_FIXTURES.BACK_DOOR,
         gibbonIsAllocated: true,
     },
     {
-        name: "C0ff3e MAcHiNe at the edge of sp@ce",
+        name: 'C0ff3e MAcHiNe at the edge of sp@ce',
         gibbonPermissionPosition: PERMISSION_POSITIONS_FIXTURES.THE_EDGE,
         gibbonIsAllocated: true,
     },

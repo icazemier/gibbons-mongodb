@@ -1,11 +1,17 @@
-import { Gibbon } from "@icazemier/gibbons";
-import { MongoClient, Document } from "mongodb";
-import { Config } from "interfaces/config.js";
+import { Gibbon } from '@icazemier/gibbons';
+import { MongoClient, Document } from 'mongodb';
+import { GibbonLike } from '../interfaces/index.js';
 
 export abstract class GibbonModel implements Document {
-    static byteLength = 256;
+    constructor(
+        protected mongoClient: MongoClient,
+        protected byteLength: number = 256
+    ) {}
 
-    constructor(protected mongoClient: MongoClient, protected config: Config) {}
+    abstract initialize(structure: {
+        dbName: string;
+        collectionName: string;
+    }): Promise<void>;
     /**
      * Convenience function which accepts an Array of positions, a Gibbon or Buffer
      * In case of an Array it creates a Gibbon
@@ -52,11 +58,12 @@ export abstract class GibbonModel implements Document {
      * ```
      * @throws TypeError - just in case, when positions is not of the right type
      */
-    static ensureGibbon(
-        positions: Gibbon | Array<number> | Buffer,
-        byteLength: number
-    ): Gibbon {
+    ensureGibbon(positions: GibbonLike): Gibbon {
+        const { byteLength } = this;
         if (positions instanceof Gibbon) {
+            if (positions.arrayBuffer.byteLength === byteLength) {
+                return positions;
+            }
             return Gibbon.create(byteLength).mergeWithGibbon(positions);
         } else if (Array.isArray(positions)) {
             return Gibbon.create(byteLength).setAllFromPositions(positions);
@@ -65,6 +72,6 @@ export abstract class GibbonModel implements Document {
                 Gibbon.decode(positions)
             );
         }
-        throw new TypeError("`Gibbon`, `Array<number>` or `Buffer` expected");
+        throw new TypeError('`Gibbon`, `Array<number>` or `Buffer` expected');
     }
 }

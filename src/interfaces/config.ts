@@ -1,7 +1,5 @@
-import { Collection } from "mongodb";
-import { IGibbonGroup } from "./gibbon-group.js";
-import { IGibbonPermission } from "./gibbon-permission.js";
-import { IGibbonUser } from "./gibbon-user.js";
+import { Collection } from 'mongodb';
+import { IGibbonGroup, IGibbonPermission, IGibbonUser } from './index.js';
 
 export interface DbCollection {
     user: Collection<IGibbonUser>;
@@ -12,15 +10,15 @@ export interface DbCollection {
 export interface DbStructure {
     user: {
         dbName: string;
-        collection: string;
+        collectionName: string;
     };
     group: {
         dbName: string;
-        collection: string;
+        collectionName: string;
     };
     permission: {
         dbName: string;
-        collection: string;
+        collectionName: string;
     };
 }
 
