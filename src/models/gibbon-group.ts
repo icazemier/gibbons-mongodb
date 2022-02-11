@@ -5,8 +5,8 @@ import {
     FindCursor,
     FindOneAndUpdateOptions,
     MongoClient,
+    UpdateFilter,
 } from "mongodb";
-import PQueue from "p-queue";
 import { Config } from "interfaces/config.js";
 import { IGibbonGroup } from "interfaces/gibbon-group.js";
 import { GibbonModel } from "./gibbon-model.js";
@@ -48,12 +48,14 @@ export class GibbonGroup extends GibbonModel {
      */
     protected static mapPermissionsBinaryToGibbon<T extends IGibbonGroup>(
         group: T
-    ): T {
-        const transformedGroup = { ...group };
-        const { buffer: permissionBuffer } =
-            transformedGroup.permissionsGibbon as Binary;
-        transformedGroup.permissionsGibbon = Gibbon.decode(permissionBuffer);
-        return { ...transformedGroup };
+    ): IGibbonGroup {
+        const { buffer: permissionBuffer } = group.permissionsGibbon as Binary;
+
+        const transformedGroup = {
+            ...group,
+            ...{ permissionsGibbon: Gibbon.decode(permissionBuffer) },
+        };
+        return transformedGroup;
     }
 
     /**
@@ -153,7 +155,9 @@ export class GibbonGroup extends GibbonModel {
      * Search for the first available non allocated group, allocates it,
      * with additional given data
      */
-    async allocate<T>(data: T): Promise<IGibbonGroup> {
+    async allocate<T>(
+        data: Omit<T, "gibbonGroupPosition"> | { gibbonGroupPosition: never }
+    ): Promise<IGibbonGroup> {
         // Query for a non allocated group
         const filter = {
             gibbonIsAllocated: false,
@@ -166,19 +170,17 @@ export class GibbonGroup extends GibbonModel {
         } as FindOneAndUpdateOptions;
 
         // Prepare an update, ensure we allocate
-        const update = {
-            $set: {
-                ...data,
-                gibbonIsAllocated: true,
-                permissionsGibbon: Gibbon.create(
-                    GibbonGroup.byteLength
-                ).encode() as Buffer,
-            },
-        };
+        const $set = {
+            ...data,
+            gibbonIsAllocated: true,
+            permissionsGibbon: Gibbon.create(
+                GibbonGroup.byteLength
+            ).encode() as Buffer,
+        } as UpdateFilter<IGibbonGroup>;
 
         const { value: group } = await this.dbCollection.findOneAndUpdate(
             filter,
-            update,
+            { $set },
             options
         );
         if (!group) {
@@ -187,7 +189,7 @@ export class GibbonGroup extends GibbonModel {
             );
         }
 
-        return group;
+        return GibbonGroup.mapPermissionsBinaryToGibbon(group);
     }
 
     /**
@@ -197,10 +199,6 @@ export class GibbonGroup extends GibbonModel {
         const permissionsBufferToUnset = permissionsToUnset.encode() as Buffer;
         const permissionPositionsToUnset =
             permissionsToUnset.getPositionsArray();
-
-        const groupUpdateQueue = new PQueue({
-            concurrency: this.config.mongoDbMutationConcurrency,
-        });
 
         // Loop through all groups check if there are any positions, then
         // be sure to unset these permissions
@@ -224,25 +222,13 @@ export class GibbonGroup extends GibbonModel {
                 gibbonGroupPosition,
             };
             // Update permissions in this group
-            const updatePromise = this.dbCollection.updateOne(groupFilter, {
+            await this.dbCollection.updateOne(groupFilter, {
                 $set: {
                     permissionsGibbon,
                 },
             });
-            groupUpdateQueue.add(async () => updatePromise);
-            // Throttle queue
-            if (groupUpdateQueue.size > groupUpdateQueue.concurrency) {
-                await groupUpdateQueue.onSizeLessThan(
-                    Math.ceil(groupUpdateQueue.concurrency / 2)
-                );
-            }
         }
-        await Promise.all([
-            // Wait until queue is done executing
-            groupUpdateQueue.onIdle(),
-            // Close cursors gracefully
-            groupCursor.close(),
-        ]);
+        await groupCursor.close();
     }
 
     /**
@@ -264,16 +250,12 @@ export class GibbonGroup extends GibbonModel {
 
         const groupCursor = this.dbCollection.find(filter, { projection });
 
-        const groupReplaceOneQueue = new PQueue({
-            concurrency: this.config.mongoDbMutationConcurrency,
-        });
-
         for await (const group of groupCursor) {
             // Fetch position for update
             const { gibbonGroupPosition } = group;
 
             // Prepare to reset values to defaults
-            const queueTask = this.dbCollection.replaceOne(
+            await this.dbCollection.replaceOne(
                 {
                     gibbonGroupPosition,
                 },
@@ -286,24 +268,8 @@ export class GibbonGroup extends GibbonModel {
                     gibbonIsAllocated: false,
                 }
             );
-
-            // Add to queue
-            groupReplaceOneQueue.add(async () => queueTask);
-
-            // Throttle traffic towards MongoDB if needed
-            if (groupReplaceOneQueue.size > groupReplaceOneQueue.concurrency) {
-                await groupReplaceOneQueue.onSizeLessThan(
-                    Math.ceil(groupReplaceOneQueue.concurrency / 2)
-                );
-            }
         }
-
-        await Promise.all([
-            // Wait until queue is done executing
-            groupReplaceOneQueue.onIdle(),
-            // Close cursors gracefully
-            groupCursor.close(),
-        ]);
+        await groupCursor.close();
     }
 
     /**
@@ -315,16 +281,13 @@ export class GibbonGroup extends GibbonModel {
         groups: Gibbon,
         permissions: Gibbon
     ): Promise<void> {
-        const groupUpdateQueue = new PQueue({
-            concurrency: this.config.mongoDbMutationConcurrency,
-        });
-
         const groupCursor = this.dbCollection.find(
             {
                 gibbonGroupPosition: { $in: groups.getPositionsArray() },
             },
             {
                 projection: {
+                    gibbonGroupPosition: 1,
                     permissionsGibbon: 1,
                 },
             }
@@ -334,7 +297,7 @@ export class GibbonGroup extends GibbonModel {
             const { permissionsGibbon, gibbonGroupPosition } = group;
             const { buffer: permissionsBuffer } = permissionsGibbon as Binary;
 
-            const updatePromise = this.dbCollection.updateOne(
+            await this.dbCollection.updateOne(
                 { gibbonGroupPosition },
                 {
                     $set: {
@@ -344,14 +307,7 @@ export class GibbonGroup extends GibbonModel {
                     },
                 }
             );
-
-            groupUpdateQueue.add(async () => updatePromise);
-            // Throttle queue
-            if (groupUpdateQueue.size > groupUpdateQueue.concurrency) {
-                await groupUpdateQueue.onSizeLessThan(
-                    Math.ceil(groupUpdateQueue.concurrency / 2)
-                );
-            }
         }
+        await groupCursor.close();
     }
 }

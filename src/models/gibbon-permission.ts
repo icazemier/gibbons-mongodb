@@ -1,6 +1,5 @@
 import { Gibbon } from "@icazemier/gibbons";
 import { Collection, FindOneAndUpdateOptions, MongoClient } from "mongodb";
-import PQueue from "p-queue";
 import { Config } from "interfaces/config.js";
 import { IGibbonPermission } from "interfaces/gibbon-permission.js";
 import { GibbonModel } from "./gibbon-model.js";
@@ -76,15 +75,11 @@ export class GibbonPermission extends GibbonModel {
             },
         });
 
-        const permissionReplaceOneQueue = new PQueue({
-            concurrency: this.config.mongoDbMutationConcurrency,
-        });
-
         for await (const permission of permissionCursor) {
             // Fetch position as reference to update later
             const { gibbonPermissionPosition } = permission;
             // Prepare to reset values to defaults (removing additional fields)
-            const queueTask = this.dbCollection.replaceOne(
+            await this.dbCollection.replaceOne(
                 {
                     gibbonPermissionPosition,
                 },
@@ -93,27 +88,8 @@ export class GibbonPermission extends GibbonModel {
                     gibbonIsAllocated: false,
                 }
             );
-
-            // Add to queue
-            permissionReplaceOneQueue.add(async () => queueTask);
-
-            // Throttle traffic towards MongoDB
-            if (
-                permissionReplaceOneQueue.size >
-                permissionReplaceOneQueue.concurrency
-            ) {
-                await permissionReplaceOneQueue.onSizeLessThan(
-                    Math.ceil(permissionReplaceOneQueue.concurrency / 2)
-                );
-            }
         }
-
-        await Promise.all([
-            // Wait until queue is done executing
-            permissionReplaceOneQueue.onIdle(),
-            // Close cursors gracefully
-            permissionCursor.close(),
-        ]);
+        await permissionCursor.close();
     }
 
     /**
