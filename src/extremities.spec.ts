@@ -109,7 +109,7 @@ describe('Explore the outer rims of permission / groups', () => {
                 name: 'Where no man has gone before',
             } as TestGroup;
             const throwsError = async () => mongoDbAdapter.allocateGroup(data);
-            await expect(throwsError()).to.be.rejectedWith(
+            throwsError().should.be.rejectedWith(
                 'Not able to allocate group, seems all groups are allocated'
             );
         });

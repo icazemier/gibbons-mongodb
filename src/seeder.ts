@@ -95,22 +95,20 @@ export class MongoDbSeeder {
      * @returns {Promise<void>}
      */
     async populateGroupsAndPermissions(): Promise<void> {
-        const countGroups = this.dbCollection.group
-            .find(
-                {
-                    gibbonIsAllocated: { $exists: true },
-                },
-                { limit: 1 }
-            )
-            .count();
-        const countPermissions = this.dbCollection.permission
-            .find(
-                {
-                    gibbonIsAllocated: { $exists: true },
-                },
-                { limit: 1 }
-            )
-            .count();
+        const countGroups = this.dbCollection.group.countDocuments(
+            {
+                gibbonIsAllocated: { $exists: true },
+            },
+            { limit: 1 }
+        );
+
+        const countPermissions = this.dbCollection.permission.countDocuments(
+            {
+                gibbonIsAllocated: { $exists: true },
+            },
+            { limit: 1 }
+        );
+
         const [count1, count2] = await Promise.all([
             countGroups,
             countPermissions,

@@ -1,93 +1,93 @@
 {
-  "name": "@icazemier/gibbons-mongodb",
-  "private": false,
-  "version": "0.0.0",
-  "type": "module",
-  "description": "Gibbons is a Node.js module which helps in managing user groups and user permissions with `bitwise` effiency.",
-  "contributors": [
-    {
-      "name": "Ivo Cazemier",
-      "email": "git@warmemelk.nl",
-      "url": "https://github.com/icazemier"
+    "name": "@icazemier/gibbons-mongodb",
+    "private": false,
+    "version": "0.0.0",
+    "type": "module",
+    "description": "Gibbons is a Node.js module which helps in managing user groups and user permissions with `bitwise` effiency.",
+    "contributors": [
+        {
+            "name": "Ivo Cazemier",
+            "email": "git@warmemelk.nl",
+            "url": "https://github.com/icazemier"
+        }
+    ],
+    "keywords": [
+        "user permissions",
+        "user groups",
+        "bitwise",
+        "MongoDB",
+        "NoSQL",
+        "cli"
+    ],
+    "files": [
+        "build/"
+    ],
+    "bin": {
+        "@icazemier/gibbons-mongodb": "./build/esm/bin/cli.js",
+        "gibbons-mongodb": "./build/esm/bin/cli.js"
+    },
+    "main": "./build/cjs/index.js",
+    "module": "./build/esm/index.js",
+    "exports": {
+        ".": {
+            "import": "./build/esm/index.js",
+            "require": "./build/cjs/index.js"
+        }
+    },
+    "types": "./build/esm/index.d.ts",
+    "engines": {
+        "node": ">=18"
+    },
+    "os": [
+        "darwin",
+        "linux",
+        "win32"
+    ],
+    "scripts": {
+        "test": "c8 mocha --file './test/helper/setup.ts'",
+        "build:esm": "tsc -p tsconfig.json",
+        "build:cjs": "tsc -p tsconfig.cjs.json",
+        "build:docs": "typedoc --out docs src/index.ts",
+        "fixup": "node ./fixup.mjs",
+        "build": "npm-run-all clean:* build:* fixup",
+        "clean:build": "rimraf build",
+        "clean:docs": "rimraf docs",
+        "lint": "eslint . --ext .ts",
+        "lint:fix": "eslint . --ext .ts --fix"
+    },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/icazemier/gibbons-mongodb"
+    },
+    "license": "MIT",
+    "dependencies": {
+        "@icazemier/gibbons": "^5.0.2",
+        "cosmiconfig": "^8.3.6",
+        "yargs": "^17.7.2"
+    },
+    "devDependencies": {
+        "@types/chai": "^4.3.6",
+        "@types/chai-as-promised": "^7.1.6",
+        "@types/mocha": "^10.0.2",
+        "@types/node": "^20.8.3",
+        "@types/yargs": "^17.0.28",
+        "@typescript-eslint/eslint-plugin": "^6.7.4",
+        "@typescript-eslint/parser": "^6.7.4",
+        "c8": "^8.0.1",
+        "chai": "^4.3.10",
+        "chai-as-promised": "^7.1.1",
+        "dotenv": "^16.3.1",
+        "eslint": "^8.51.0",
+        "eslint-config-prettier": "^9.0.0",
+        "eslint-plugin-prettier": "^5.0.0",
+        "mocha": "^10.2.0",
+        "mongodb": "^6.1.0",
+        "mongodb-memory-server": "^9.0.0",
+        "noop-stream": "^1.0.0",
+        "npm-run-all": "^4.1.5",
+        "rimraf": "^5.0.5",
+        "ts-node": "^10.9.1",
+        "typedoc": "^0.25.2",
+        "typescript": "^5.2.2"
     }
-  ],
-  "keywords": [
-    "user permissions",
-    "user groups",
-    "bitwise",
-    "MongoDB",
-    "NoSQL",
-    "cli"
-  ],
-  "files": [
-    "build/"
-  ],
-  "bin": {
-    "@icazemier/gibbons-mongodb": "./build/esm/bin/cli.js",
-    "gibbons-mongodb": "./build/esm/bin/cli.js"
-  },
-  "main": "./build/cjs/index.js",
-  "module": "./build/esm/index.js",
-  "exports": {
-    ".": {
-      "import": "./build/esm/index.js",
-      "require": "./build/cjs/index.js"
-    }
-  },
-  "types": "./build/esm/index.d.ts",
-  "engines": {
-    "node": "^12.20.0 || ^14.13.1 || >=16.0.0"
-  },
-  "os": [
-    "darwin",
-    "linux",
-    "win32"
-  ],
-  "scripts": {
-    "test": "c8 mocha --file './test/helper/setup.ts'",
-    "build:esm": "tsc -p tsconfig.json",
-    "build:cjs": "tsc -p tsconfig.cjs.json",
-    "build:docs": "typedoc --out docs src/index.ts",
-    "fixup": "node ./fixup.mjs",
-    "build": "npm-run-all clean:* build:* fixup",
-    "clean:build": "rimraf build",
-    "clean:docs": "rimraf docs",
-    "lint": "eslint . --ext .ts",
-    "lint:fix": "eslint . --ext .ts --fix"
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/icazemier/gibbons-mongodb"
-  },
-  "license": "MIT",
-  "dependencies": {
-    "@icazemier/gibbons": "^5.0.1",
-    "cosmiconfig": "^7.0.1",
-    "yargs": "^17.6.0"
-  },
-  "devDependencies": {
-    "@types/chai": "^4.3.3",
-    "@types/chai-as-promised": "^7.1.5",
-    "@types/mocha": "^10.0.0",
-    "@types/node": "^18.8.3",
-    "@types/yargs": "^17.0.13",
-    "@typescript-eslint/eslint-plugin": "^5.39.0",
-    "@typescript-eslint/parser": "^5.39.0",
-    "c8": "^7.12.0",
-    "chai": "^4.3.6",
-    "chai-as-promised": "^7.1.1",
-    "dotenv": "^16.0.3",
-    "eslint": "^8.25.0",
-    "eslint-config-prettier": "^8.5.0",
-    "eslint-plugin-prettier": "^4.2.1",
-    "mocha": "^10.0.0",
-    "mongodb": "^4.10.0",
-    "mongodb-memory-server": "^8.9.3",
-    "noop-stream": "^1.0.0",
-    "npm-run-all": "^4.1.5",
-    "rimraf": "^3.0.2",
-    "ts-node": "^10.9.1",
-    "typedoc": "^0.23.15",
-    "typescript": "^4.8.4"
-  }
 }
