@@ -30,3 +30,4 @@ Temporary Items
 .claude/
 .claude*
 CLAUDE.md
+.env.local

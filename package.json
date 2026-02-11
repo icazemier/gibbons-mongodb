@@ -67,6 +67,9 @@
     "url": "https://github.com/icazemier/gibbons-mongodb/issues"
   },
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "peerDependencies": {
     "mongodb": "^6.0.0"
   },
