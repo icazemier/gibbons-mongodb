@@ -8,7 +8,7 @@ import {
   afterAll,
 } from 'vitest';
 import { Gibbon } from '@icazemier/gibbons';
-import { Binary, Collection, MongoClient, ObjectId } from 'mongodb';
+import { Binary, Collection, Filter, MongoClient, ObjectId } from 'mongodb';
 import { writableNoopStream } from 'noop-stream';
 import { pipeline, PassThrough } from 'stream';
 import {
@@ -111,7 +111,7 @@ describe('Happy flows', () => {
           .setAllFromPositions(groupPositions)
           .encode() as Buffer,
       },
-    } as any;
+    } as Filter<TestUser>;
 
     const testUser = await dbCollection.user.findOne(testUserfilter);
     console.log(`Test user: ${testUser?.email}`);

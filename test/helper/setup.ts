@@ -3,7 +3,7 @@ import { MongoMemoryReplSet } from 'mongodb-memory-server';
 
 config();
 
-let replSet: MongoMemoryReplSet;
+let replSet: MongoMemoryReplSet | undefined;
 
 export async function setup() {
   console.info('Setting up mongodb in memory replicaset');

@@ -7,6 +7,7 @@ const ignores = [
   'node_modules/**/*',
   'coverage/**/*',
   'docs/**/*',
+  '.claude/**/*',
 ];
 
 const stylisticConfig = {
