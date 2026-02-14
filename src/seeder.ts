@@ -20,13 +20,14 @@ const BATCH_SIZE = 1000;
  *
  * const mongoClient = await MongoClient.connect('mongodb://localhost:27017');
  * const config = {
+ *   dbName: 'mydb',
  *   permissionByteLength: 256,
  *   groupByteLength: 256,
  *   mongoDbMutationConcurrency: 10,
  *   dbStructure: {
- *     user: { dbName: 'mydb', collectionName: 'users' },
- *     group: { dbName: 'mydb', collectionName: 'groups' },
- *     permission: { dbName: 'mydb', collectionName: 'permissions' }
+ *     user: { collectionName: 'users' },
+ *     group: { collectionName: 'groups' },
+ *     permission: { collectionName: 'permissions' }
  *   }
  * };
  *
@@ -42,18 +43,14 @@ export class MongoDbSeeder {
   public readonly dbCollection!: DbCollection;
 
   constructor(mongoClient: MongoClient, config: Config) {
-    // map collections for convenience
-    const user = mongoClient
-      .db(config.dbStructure.user.dbName)
-      .collection<IGibbonUser>(config.dbStructure.user.collectionName);
-    const group = mongoClient
-      .db(config.dbStructure.group.dbName)
-      .collection<IGibbonGroup>(config.dbStructure.group.collectionName);
-    const permission = mongoClient
-      .db(config.dbStructure.permission.dbName)
-      .collection<IGibbonPermission>(
-        config.dbStructure.permission.collectionName
-      );
+    const { dbName, dbStructure } = config;
+    const db = mongoClient.db(dbName);
+
+    const user = db.collection<IGibbonUser>(dbStructure.user.collectionName);
+    const group = db.collection<IGibbonGroup>(dbStructure.group.collectionName);
+    const permission = db.collection<IGibbonPermission>(
+      dbStructure.permission.collectionName
+    );
 
     this.config = config;
     this.dbCollection = { user, group, permission };

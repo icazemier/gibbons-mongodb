@@ -1,18 +1,16 @@
 {
+    "dbName": "test",
     "permissionByteLength": 1024,
     "groupByteLength": 1024,
     "mongoDbMutationConcurrency": 5,
     "dbStructure": {
         "user": {
-            "dbName": "test",
             "collectionName": "user"
         },
         "group": {
-            "dbName": "test",
             "collectionName": "group"
         },
         "permission": {
-            "dbName": "test",
             "collectionName": "permission"
         }
     }

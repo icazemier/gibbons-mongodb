@@ -43,13 +43,13 @@ describe('Explore the outer rims of permission / groups', () => {
 
     dbCollection = {
       user: mongoClient
-        .db(config.dbStructure.user.dbName)
+        .db(config.dbName)
         .collection<TestUser>(config.dbStructure.user.collectionName),
       group: mongoClient
-        .db(config.dbStructure.group.dbName)
+        .db(config.dbName)
         .collection<TestGroup>(config.dbStructure.group.collectionName),
       permission: mongoClient
-        .db(config.dbStructure.permission.dbName)
+        .db(config.dbName)
         .collection<TestPermission>(
           config.dbStructure.permission.collectionName
         ),

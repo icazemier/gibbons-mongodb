@@ -62,13 +62,14 @@ export class GibbonsMongoDb implements IPermissionsResource {
    * @example
    * ```typescript
    * const config = {
+   *   dbName: 'mydb',
    *   permissionByteLength: 256,
    *   groupByteLength: 256,
    *   mongoDbMutationConcurrency: 10,
    *   dbStructure: {
-   *     user: { dbName: 'mydb', collectionName: 'users' },
-   *     group: { dbName: 'mydb', collectionName: 'groups' },
-   *     permission: { dbName: 'mydb', collectionName: 'permissions' }
+   *     user: { collectionName: 'users' },
+   *     group: { collectionName: 'groups' },
+   *     permission: { collectionName: 'permissions' }
    *   }
    * };
    * const gibbonsDb = new GibbonsMongoDb('mongodb://localhost:27017', config);
@@ -104,14 +105,12 @@ export class GibbonsMongoDb implements IPermissionsResource {
     this.gibbonPermission = new GibbonPermission(mongoClient, config);
     this.gibbonGroup = new GibbonGroup(mongoClient, config);
 
-    const {
-      dbStructure: { group, permission, user },
-    } = config;
+    const { dbName, dbStructure: { group, permission, user } } = config;
 
     await Promise.all([
-      this.gibbonUser.initialize(user),
-      this.gibbonPermission.initialize(permission),
-      this.gibbonGroup.initialize(group),
+      this.gibbonUser.initialize(dbName, user.collectionName),
+      this.gibbonPermission.initialize(dbName, permission.collectionName),
+      this.gibbonGroup.initialize(dbName, group.collectionName),
     ]);
   }
 

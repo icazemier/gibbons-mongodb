@@ -12,7 +12,7 @@ export const tearDownGroupTestFixtures = async (
   config: Config
 ) => {
   await mongoClient
-    .db(config.dbStructure.group.dbName)
+    .db(config.dbName)
     .collection(config.dbStructure.group.collectionName)
     .deleteMany({});
 };
@@ -22,7 +22,7 @@ export const tearDownPermissionTestFixtures = async (
   config: Config
 ) => {
   await mongoClient
-    .db(config.dbStructure.permission.dbName)
+    .db(config.dbName)
     .collection(config.dbStructure.permission.collectionName)
     .deleteMany({});
 };
@@ -32,7 +32,7 @@ export const tearDownUserTestFixtures = async (
   config: Config
 ) => {
   await mongoClient
-    .db(config.dbStructure.user.dbName)
+    .db(config.dbName)
     .collection(config.dbStructure.user.collectionName)
     .deleteMany({});
 };
@@ -52,11 +52,11 @@ export const seedUserTestFixtures = async (
     groupsFiltered.forEach(({ permissionsGibbon }) => {
       permissionGibbon.mergeWithGibbon(Gibbon.decode(permissionsGibbon));
     });
-    user.permissionsGibbon = permissionGibbon.encode() as Buffer;
+    user.permissionsGibbon = permissionGibbon.toBuffer();
   });
 
   await mongoClient
-    .db(config.dbStructure.user.dbName)
+    .db(config.dbName)
     .collection(config.dbStructure.user.collectionName)
     .insertMany(usersFixtures);
 };
@@ -68,7 +68,7 @@ export const seedPermissionTestFixtures = async (
   const permissionsPromises = permissionsFixtures.map(
     ({ name, gibbonPermissionPosition, gibbonIsAllocated }) => {
       return mongoClient
-        .db(config.dbStructure.permission.dbName)
+        .db(config.dbName)
         .collection(config.dbStructure.permission.collectionName)
         .updateOne(
           { gibbonPermissionPosition },
@@ -87,7 +87,7 @@ export const seedGroupTestFixtures = async (
   const groupPromises = groupsFixtures.map(
     ({ name, gibbonGroupPosition, permissionsGibbon, gibbonIsAllocated }) => {
       return mongoClient
-        .db(config.dbStructure.group.dbName)
+        .db(config.dbName)
         .collection(config.dbStructure.group.collectionName)
         .updateOne(
           { gibbonGroupPosition },

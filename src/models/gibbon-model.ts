@@ -20,12 +20,10 @@ export abstract class GibbonModel implements Document {
   /**
    * Initializes the model by binding it to a specific database and collection.
    *
-   * @param structure - Database name and collection name to bind to
+   * @param dbName - Database name to bind to
+   * @param collectionName - Collection name to bind to
    */
-  abstract initialize(structure: {
-    dbName: string;
-    collectionName: string;
-  }): Promise<void>;
+  abstract initialize(dbName: string, collectionName: string): Promise<void>;
 
   /**
    * Convenience function which accepts an Array of positions, a Gibbon or Buffer

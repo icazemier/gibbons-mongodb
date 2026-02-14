@@ -19,11 +19,7 @@ export class GibbonUser extends GibbonModel {
   protected dbCollection!: Collection<IGibbonUser>;
 
   /** {@inheritDoc GibbonModel.initialize} */
-  async initialize(structure: {
-    dbName: string;
-    collectionName: string;
-  }): Promise<void> {
-    const { dbName, collectionName } = structure;
+  async initialize(dbName: string, collectionName: string): Promise<void> {
     this.dbCollection = this.mongoClient.db(dbName).collection(collectionName);
   }
 
