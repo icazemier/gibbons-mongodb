@@ -107,9 +107,11 @@ describe('Happy flows', () => {
 
     const testUserfilter = {
       groupsGibbon: {
-        $bitsAnySet: Gibbon.create(1024)
-          .setAllFromPositions(groupPositions)
-          .encode() as Buffer,
+        $bitsAnySet: new Binary(
+          Gibbon.create(1024)
+            .setAllFromPositions(groupPositions)
+            .toBuffer()
+        ),
       },
     } as Filter<TestUser>;
 
@@ -368,7 +370,7 @@ describe('Happy flows', () => {
 
     const gibbonPermissionsBefore = Gibbon.decode(toBuffer(bufferBefore))
       .setAllFromPositions(permissionPositions)
-      .encode() as Buffer;
+      .toBuffer();
 
     await dbCollection.group.findOneAndUpdate(
       {
@@ -385,7 +387,7 @@ describe('Happy flows', () => {
         name: 'Test 1',
         groupsGibbon: Gibbon.create(1024)
           .setPosition(GROUP_POSITION_FIXTURES.GI_JOE)
-          .encode() as Buffer,
+          .toBuffer(),
         permissionsGibbon: gibbonPermissionsBefore,
       },
       {
@@ -393,7 +395,7 @@ describe('Happy flows', () => {
         name: 'Test 2',
         groupsGibbon: Gibbon.create(1024)
           .setPosition(GROUP_POSITION_FIXTURES.GI_JOE)
-          .encode() as Buffer,
+          .toBuffer(),
         permissionsGibbon: gibbonPermissionsBefore,
       },
     ] as TestUser[];
@@ -484,7 +486,7 @@ describe('Happy flows', () => {
     groupsGibbonBefore.setAllFromPositions([position1, position2]);
     await dbCollection.user.updateOne(
       { _id },
-      { $set: { groupsGibbon: groupsGibbonBefore.encode() as Buffer } }
+      { $set: { groupsGibbon: groupsGibbonBefore.toBuffer() } }
     );
 
     await mongoDbAdapter.deallocateGroups([position1, position2]);

@@ -21,7 +21,7 @@ const usersFixtures = [
     name: 'Arnold Schwarzenegger',
     groupsGibbon: Gibbon.create(1024)
       .setPosition(GROUP_POSITION_FIXTURES.A_TEAM)
-      .encode() as Buffer,
+      .toBuffer(),
     permissionsGibbon: Buffer.alloc(1),
   },
   {
@@ -29,7 +29,7 @@ const usersFixtures = [
     name: 'Michael Knight',
     groupsGibbon: Gibbon.create(1024)
       .setPosition(GROUP_POSITION_FIXTURES.TRANSFORMERS)
-      .encode() as Buffer,
+      .toBuffer(),
     permissionsGibbon: Buffer.alloc(1),
   },
   {
@@ -40,7 +40,7 @@ const usersFixtures = [
         GROUP_POSITION_FIXTURES.GI_JOE,
         GROUP_POSITION_FIXTURES.A_TEAM,
       ])
-      .encode() as Buffer,
+      .toBuffer(),
     permissionsGibbon: Buffer.alloc(1),
   },
   {
@@ -48,14 +48,14 @@ const usersFixtures = [
     name: 'Cooper',
     groupsGibbon: Gibbon.create(1024)
       .setPosition(GROUP_POSITION_FIXTURES.PLANETEERS)
-      .encode() as Buffer,
+      .toBuffer(),
     permissionsGibbon: Buffer.alloc(1),
   },
   {
     email: 'john@doe.born',
     name: 'John',
     // No group, means no permissions ;)
-    groupsGibbon: Gibbon.create(1024).encode() as Buffer,
+    groupsGibbon: Gibbon.create(1024).toBuffer(),
     permissionsGibbon: Buffer.alloc(1),
   },
 ];
@@ -65,7 +65,7 @@ const groupsFixtures = [
     name: 'GI Joe',
     permissionsGibbon: Gibbon.create(1024)
       .setPosition(PERMISSION_POSITIONS_FIXTURES.GOD_MODE)
-      .encode() as Buffer,
+      .toBuffer(),
     gibbonGroupPosition: GROUP_POSITION_FIXTURES.GI_JOE,
     gibbonIsAllocated: true,
   },
@@ -73,7 +73,7 @@ const groupsFixtures = [
     name: `Auto's in disguise`,
     permissionsGibbon: Gibbon.create(1024)
       .setAllFromPositions([PERMISSION_POSITIONS_FIXTURES.ADMIN])
-      .encode() as Buffer,
+      .toBuffer(),
     gibbonGroupPosition: GROUP_POSITION_FIXTURES.TRANSFORMERS,
     gibbonIsAllocated: true,
   },
@@ -84,7 +84,7 @@ const groupsFixtures = [
         PERMISSION_POSITIONS_FIXTURES.USER,
         PERMISSION_POSITIONS_FIXTURES.BACK_DOOR,
       ])
-      .encode() as Buffer,
+      .toBuffer(),
     gibbonGroupPosition: GROUP_POSITION_FIXTURES.A_TEAM,
     gibbonIsAllocated: true,
   },
@@ -95,7 +95,7 @@ const groupsFixtures = [
         PERMISSION_POSITIONS_FIXTURES.USER,
         PERMISSION_POSITIONS_FIXTURES.THE_EDGE,
       ])
-      .encode() as Buffer,
+      .toBuffer(),
     gibbonGroupPosition: GROUP_POSITION_FIXTURES.PLANETEERS,
     gibbonIsAllocated: true,
   },
