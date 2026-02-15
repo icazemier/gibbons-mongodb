@@ -184,7 +184,7 @@ Yes. Gibbons adds `groupsGibbon` and `permissionsGibbon` fields without touching
 `byteLength * 8`. So 256 bytes = 2,048, 1024 bytes = 8,192.
 
 **Can I change byte lengths later?**
-No. Changing them on a live system corrupts existing data. Choose generously upfront.
+Yes. Use `expandPermissions` / `expandGroups` to grow, or `shrinkPermissions` / `shrinkGroups` to reduce. These methods re-seed slots, pad or truncate existing Binary fields, and update the config — all inside a transaction.
 
 **Do I need a replica set for transactions?**
 Yes. MongoDB transactions require a replica set (or sharded cluster). Standalone servers don't support them, but you can still use all methods without the `session` parameter.
@@ -196,7 +196,7 @@ Yes. `new GibbonsMongoDb(myClient, config)` reuses your client, so sessions you 
 Multi-step methods (deallocate, subscribe, unsubscribe) auto-wrap in a transaction when no `session` is passed. To combine multiple calls in one transaction, pass your own `session`.
 
 **What happens when all slots are used?**
-`allocatePermission` / `allocateGroup` throws. Increase the byte length in config and re-seed.
+`allocatePermission` / `allocateGroup` throws. Use `expandPermissions` / `expandGroups` to increase capacity at runtime.
 
 ## License
 
