@@ -1,4 +1,5 @@
 import {
+  ClientSession,
   Collection,
   FindCursor,
   FindOneAndUpdateOptions,
@@ -36,10 +37,14 @@ export class GibbonPermission extends GibbonModel {
    * and stores additional given data.
    *
    * @param data - Additional data to store on the permission document (e.g. name, description)
+   * @param session - Optional MongoDB client session for transactional operations
    * @returns The newly allocated permission document
    * @throws Error when all permission slots are already allocated
    */
-  async allocate<T>(data: T): Promise<IGibbonPermission> {
+  async allocate<T>(
+    data: T,
+    session?: ClientSession
+  ): Promise<IGibbonPermission> {
     // Query for a non-allocated permission
     const filter = {
       gibbonIsAllocated: false,
@@ -48,6 +53,7 @@ export class GibbonPermission extends GibbonModel {
     const options = {
       returnDocument: 'after',
       sort: ['gibbonPermissionPosition', 1],
+      session,
     } as FindOneAndUpdateOptions;
     // Prepare an update, ensure we allocate
     const update = {
@@ -76,15 +82,22 @@ export class GibbonPermission extends GibbonModel {
    * Note: Removing permissions from groups and users is handled by the facade.
    *
    * @param permissions - Permission positions to deallocate
+   * @param session - Optional MongoDB client session for transactional operations
    */
-  async deallocate(permissions: GibbonLike): Promise<void> {
+  async deallocate(
+    permissions: GibbonLike,
+    session?: ClientSession
+  ): Promise<void> {
     // First get the permissions themselves in a cursor
     const $in = this.ensureGibbon(permissions).getPositionsArray();
-    const permissionCursor = this.dbCollection.find({
-      gibbonPermissionPosition: {
-        $in,
+    const permissionCursor = this.dbCollection.find(
+      {
+        gibbonPermissionPosition: {
+          $in,
+        },
       },
-    });
+      { session }
+    );
 
     for await (const permission of permissionCursor) {
       // Fetch position as reference to update later
@@ -97,7 +110,8 @@ export class GibbonPermission extends GibbonModel {
         {
           gibbonPermissionPosition,
           gibbonIsAllocated: false,
-        }
+        },
+        { session }
       );
     }
     await permissionCursor.close();
@@ -108,11 +122,13 @@ export class GibbonPermission extends GibbonModel {
    *
    * @param permissions - Permission positions to validate
    * @param allocated - When `true` (default), checks that permissions are allocated; when `false`, checks they are not
+   * @param session - Optional MongoDB client session for transactional operations
    * @returns `true` if all given permission positions match the expected allocation state
    */
   public async validate(
     permissions: GibbonLike,
-    allocated = true
+    allocated = true,
+    session?: ClientSession
   ): Promise<boolean> {
     const permissionPositions =
       this.ensureGibbon(permissions).getPositionsArray();
@@ -124,7 +140,7 @@ export class GibbonPermission extends GibbonModel {
       gibbonIsAllocated: allocated ? true : { $ne: true },
     };
 
-    const count = await this.dbCollection.countDocuments(filter);
+    const count = await this.dbCollection.countDocuments(filter, { session });
     return count === permissionPositions.length;
   }
 
@@ -158,13 +174,15 @@ export class GibbonPermission extends GibbonModel {
    *
    * @param permissionPosition - The position of the permission to update
    * @param data - Key-value pairs to set on the permission document
+   * @param session - Optional MongoDB client session for transactional operations
    * @returns The updated permission document, or `null` if no allocated permission was found at that position
    */
   public async updateMetadata<T extends Record<string, unknown>>(
     permissionPosition: number,
-    data: T
+    data: T,
+    session?: ClientSession
   ): Promise<IGibbonPermission | null> {
-    const options: FindOneAndUpdateOptions = { returnDocument: 'after' };
+    const options: FindOneAndUpdateOptions = { returnDocument: 'after', session };
     return this.dbCollection.findOneAndUpdate(
       { gibbonPermissionPosition: permissionPosition, gibbonIsAllocated: true },
       { $set: data as Partial<IGibbonPermission> },

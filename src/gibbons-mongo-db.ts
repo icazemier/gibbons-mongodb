@@ -1,4 +1,4 @@
-import { Binary, Filter, FindCursor, MongoClient } from 'mongodb';
+import { Binary, ClientSession, Filter, FindCursor, MongoClient } from 'mongodb';
 
 import { GibbonUser, GibbonGroup, GibbonPermission } from './models/index.js';
 import { Gibbon } from '@icazemier/gibbons';
@@ -8,10 +8,14 @@ import { IGibbonGroup } from './interfaces/gibbon-group.js';
 import { IGibbonUser } from './interfaces/gibbon-user.js';
 import { Config } from './interfaces/config.js';
 import { IGibbonPermission } from './interfaces/gibbon-permission.js';
+import { withTransaction } from './utils.js';
 
 /**
  * Main class which does all the "heavy" lifting against MongoDB for managing
  * users, groups, and permissions with bitwise efficiency using Gibbons.
+ *
+ * All multi-step operations are wrapped in MongoDB transactions
+ * for atomicity and consistency.
  *
  * @example Complete workflow
  * ```typescript
@@ -52,34 +56,42 @@ export class GibbonsMongoDb implements IPermissionsResource {
   protected gibbonGroup!: GibbonGroup;
   protected gibbonPermission!: GibbonPermission;
   protected gibbonUser!: GibbonUser;
+  protected mongoClient!: MongoClient;
+  private readonly mongoClientOrUri: MongoClient | string;
 
   /**
-   * Creates a new GibbonsMongoDb instance
+   * Creates a new GibbonsMongoDb instance.
    *
-   * @param mongoUri - MongoDB connection URI
-   * @param config - Configuration object with database structure and byte lengths
+   * @param mongoClientOrUri - A MongoDB connection URI **or** an existing connected `MongoClient`.
+   *   When a `MongoClient` is provided the adapter re-uses it (no extra connection is created),
+   *   so sessions started from that client work with all facade methods.
+   * @param config - Configuration containing database structure and byte lengths
    *
-   * @example
+   * @example Using a URI (adapter creates its own client)
    * ```typescript
-   * const config = {
-   *   dbName: 'mydb',
-   *   permissionByteLength: 256,
-   *   groupByteLength: 256,
-   *   mongoDbMutationConcurrency: 10,
-   *   dbStructure: {
-   *     user: { collectionName: 'users' },
-   *     group: { collectionName: 'groups' },
-   *     permission: { collectionName: 'permissions' }
-   *   }
-   * };
    * const gibbonsDb = new GibbonsMongoDb('mongodb://localhost:27017', config);
    * await gibbonsDb.initialize();
    * ```
+   *
+   * @example Using an existing MongoClient (shared connection)
+   * ```typescript
+   * const client = await MongoClient.connect('mongodb://localhost:27017');
+   * const gibbonsDb = new GibbonsMongoDb(client, config);
+   * await gibbonsDb.initialize();
+   *
+   * // Sessions from `client` work directly
+   * await withTransaction(client, async (session) => {
+   *   await gibbonsDb.allocatePermission({ name: 'edit' }, session);
+   *   await gibbonsDb.allocateGroup({ name: 'admins' }, session);
+   * });
+   * ```
    */
   constructor(
-    protected mongoUri: string,
+    mongoClientOrUri: MongoClient | string,
     protected config: Config
-  ) {}
+  ) {
+    this.mongoClientOrUri = mongoClientOrUri;
+  }
 
   /**
    * Initialize the GibbonsMongoDb instance by connecting to MongoDB
@@ -96,10 +108,44 @@ export class GibbonsMongoDb implements IPermissionsResource {
    * // Now ready to use
    * ```
    */
-  public async initialize(): Promise<void> {
-    const { mongoUri, config } = this;
+  /**
+   * Returns the underlying MongoClient used by this instance.
+   * When a `MongoClient` was injected via the constructor this returns the same instance,
+   * so sessions created from it work seamlessly with all facade methods.
+   *
+   * @throws Error if called before {@link initialize}
+   *
+   * @example
+   * ```typescript
+   * const client = gibbonsDb.getMongoClient();
+   * const session = client.startSession();
+   * ```
+   */
+  public getMongoClient(): MongoClient {
+    if (!this.mongoClient) {
+      throw new Error('GibbonsMongoDb is not initialized. Call initialize() first.');
+    }
+    return this.mongoClient;
+  }
 
-    const mongoClient = await MongoClient.connect(mongoUri);
+  /**
+   * Initialize the GibbonsMongoDb instance by setting up
+   * the collections for users, groups, and permissions.
+   *
+   * When constructed with a URI a new `MongoClient` connection is created.
+   * When constructed with an existing `MongoClient` the connection is re-used.
+   *
+   * Must be called before using any other methods.
+   */
+  public async initialize(): Promise<void> {
+    const { mongoClientOrUri, config } = this;
+
+    this.mongoClient =
+      typeof mongoClientOrUri === 'string'
+        ? await MongoClient.connect(mongoClientOrUri)
+        : mongoClientOrUri;
+
+    const { mongoClient } = this;
 
     this.gibbonUser = new GibbonUser(mongoClient);
     this.gibbonPermission = new GibbonPermission(mongoClient, config);
@@ -112,6 +158,34 @@ export class GibbonsMongoDb implements IPermissionsResource {
       this.gibbonPermission.initialize(dbName, permission.collectionName),
       this.gibbonGroup.initialize(dbName, group.collectionName),
     ]);
+  }
+
+  /**
+   * Creates a session-aware {@link IPermissionsResource} that threads the
+   * transaction session into the underlying group query, so that reads
+   * inside the transaction see uncommitted writes.
+   */
+  private sessionAwarePermissionsResource(
+    session: ClientSession
+  ): IPermissionsResource {
+    return {
+      getPermissionsGibbonForGroups: (groups: Gibbon) =>
+        this.gibbonGroup.getPermissionsGibbonForGroups(groups, session),
+    };
+  }
+
+  /**
+   * Runs `fn` inside a transaction when no external session is provided,
+   * or uses the provided session directly (caller owns the transaction).
+   */
+  private async executeInSession<T>(
+    session: ClientSession | undefined,
+    fn: (session: ClientSession) => Promise<T>
+  ): Promise<T> {
+    if (session) {
+      return fn(session);
+    }
+    return withTransaction(this.mongoClient, fn);
   }
 
   /**
@@ -250,14 +324,19 @@ export class GibbonsMongoDb implements IPermissionsResource {
    * console.log(permission.gibbonIsAllocated); // true
    * ```
    */
-  async allocatePermission<T>(data: T): Promise<IGibbonPermission> {
-    return this.gibbonPermission.allocate(data);
+  async allocatePermission<T>(
+    data: T,
+    session?: ClientSession
+  ): Promise<IGibbonPermission> {
+    return this.gibbonPermission.allocate(data, session);
   }
 
   /**
    * Deallocates permission(s)
    * - Deallocates permission and sets them to default values
    * - Removes related permissions from groups and users
+   *
+   * Runs inside a transaction for atomicity.
    *
    * @param permissions - Permission position collection
    * @returns {Promise<void>}
@@ -271,10 +350,15 @@ export class GibbonsMongoDb implements IPermissionsResource {
    * await gibbonsDb.deallocatePermissions([1, 2, 3]);
    * ```
    */
-  async deallocatePermissions(permissions: GibbonLike): Promise<void> {
-    await this.gibbonPermission.deallocate(permissions);
-    await this.gibbonGroup.unsetPermissions(permissions);
-    await this.gibbonUser.unsetPermissions(permissions);
+  async deallocatePermissions(
+    permissions: GibbonLike,
+    session?: ClientSession
+  ): Promise<void> {
+    await this.executeInSession(session, async (s) => {
+      await this.gibbonPermission.deallocate(permissions, s);
+      await this.gibbonGroup.unsetPermissions(permissions, s);
+      await this.gibbonUser.unsetPermissions(permissions, s);
+    });
   }
 
   /**
@@ -311,14 +395,17 @@ export class GibbonsMongoDb implements IPermissionsResource {
    * @returns Created group
    */
   public async allocateGroup<OmitGibbonGroupPosition>(
-    data: OmitGibbonGroupPosition
+    data: OmitGibbonGroupPosition,
+    session?: ClientSession
   ): Promise<IGibbonGroup> {
-    return this.gibbonGroup.allocate(data);
+    return this.gibbonGroup.allocate(data, session);
   }
 
   /**
    * Resets default values to each given group, then
    * it removes membership from each user for these groups
+   *
+   * Runs inside a transaction for atomicity.
    *
    * @param groups - Group positions collection
    *
@@ -331,9 +418,15 @@ export class GibbonsMongoDb implements IPermissionsResource {
    * await gibbonsDb.deallocateGroups([1, 2, 4]);
    * ```
    */
-  public async deallocateGroups(groups: GibbonLike): Promise<void> {
-    await this.gibbonGroup.deallocate(groups);
-    await this.gibbonUser.unsetGroups(groups, this);
+  public async deallocateGroups(
+    groups: GibbonLike,
+    session?: ClientSession
+  ): Promise<void> {
+    await this.executeInSession(session, async (s) => {
+      const permissionsResource = this.sessionAwarePermissionsResource(s);
+      await this.gibbonGroup.deallocate(groups, s);
+      await this.gibbonUser.unsetGroups(groups, permissionsResource, s);
+    });
   }
 
   /**
@@ -486,6 +579,8 @@ export class GibbonsMongoDb implements IPermissionsResource {
   /**
    * Retrieve users and their current group membership, patch given groups and update their aggregated permissions
    *
+   * Runs inside a transaction for atomicity.
+   *
    * @param filter - MongoDB filter to select users
    * @param groups - Group positions to subscribe users to
    *
@@ -506,31 +601,37 @@ export class GibbonsMongoDb implements IPermissionsResource {
    */
   async subscribeUsersToGroups(
     filter: Filter<IGibbonUser>,
-    groups: GibbonLike
+    groups: GibbonLike,
+    session?: ClientSession
   ): Promise<void> {
-    const groupsGibbon = this.gibbonGroup.ensureGibbon(groups);
-    const valid = await this.gibbonGroup.validate(groupsGibbon);
+    await this.executeInSession(session, async (s) => {
+      const groupsGibbon = this.gibbonGroup.ensureGibbon(groups);
+      const valid = await this.gibbonGroup.validate(groupsGibbon, true, s);
 
-    if (!valid) {
-      throw new Error(
-        `Suggested groups aren't valid (not allocated): ${groupsGibbon.getPositionsArray()}`
+      if (!valid) {
+        throw new Error(
+          `Suggested groups aren't valid (not allocated): ${groupsGibbon.getPositionsArray()}`
+        );
+      }
+
+      // First we need to know which permissions belong to these given groups
+      const permissionsGibbon =
+        await this.gibbonGroup.getPermissionsGibbonForGroups(groupsGibbon, s);
+      // Delegate the search for users and subscribe them
+      await this.gibbonUser.subscribeToGroupsAndPermissions(
+        filter,
+        groupsGibbon,
+        permissionsGibbon,
+        s
       );
-    }
-
-    // First we need to know which permissions belong to these given groups
-    const permissionsGibbon =
-      await this.gibbonGroup.getPermissionsGibbonForGroups(groupsGibbon);
-    // Delegate the search for users and subscribe them
-    await this.gibbonUser.subscribeToGroupsAndPermissions(
-      filter,
-      groupsGibbon,
-      permissionsGibbon
-    );
+    });
   }
 
   /**
    * Subscribe (set) permissions to given groups
    * Users subscribed to these groups need to be updated with these additional permissions
+   *
+   * Runs inside a transaction for atomicity.
    *
    * @param groups - Group positions to add permissions to
    * @param permissions - Permission positions to subscribe
@@ -549,36 +650,44 @@ export class GibbonsMongoDb implements IPermissionsResource {
    */
   async subscribePermissionsToGroups(
     groups: GibbonLike,
-    permissions: GibbonLike
+    permissions: GibbonLike,
+    session?: ClientSession
   ): Promise<void> {
-    const groupsGibbon = this.gibbonGroup.ensureGibbon(groups);
-    const permissionGibbon = this.gibbonPermission.ensureGibbon(permissions);
+    await this.executeInSession(session, async (s) => {
+      const groupsGibbon = this.gibbonGroup.ensureGibbon(groups);
+      const permissionGibbon = this.gibbonPermission.ensureGibbon(permissions);
 
-    // Validate to ensure groups and permissions are allocated
-    const [permissionsValid, groupsValid] = await Promise.all([
-      this.gibbonPermission.validate(permissionGibbon),
-      this.gibbonGroup.validate(groupsGibbon),
-    ]);
+      // Validate to ensure groups and permissions are allocated
+      const [permissionsValid, groupsValid] = await Promise.all([
+        this.gibbonPermission.validate(permissionGibbon, true, s),
+        this.gibbonGroup.validate(groupsGibbon, true, s),
+      ]);
 
-    if (!permissionsValid) {
-      throw new Error(
-        `Suggested permissions are not valid (not allocated): ${permissionGibbon.getPositionsArray()}`
+      if (!permissionsValid) {
+        throw new Error(
+          `Suggested permissions are not valid (not allocated): ${permissionGibbon.getPositionsArray()}`
+        );
+      }
+      if (!groupsValid) {
+        throw new Error(
+          `Suggested groups are not valid (not allocated): ${groupsGibbon.getPositionsArray()}`
+        );
+      }
+
+      // First update groups with these permissions
+      await this.gibbonGroup.subscribePermissions(
+        groupsGibbon,
+        permissionGibbon,
+        s
       );
-    }
-    if (!groupsValid) {
-      throw new Error(
-        `Suggested groups are not valid (not allocated): ${groupsGibbon.getPositionsArray()}`
+
+      // Ensure users subscribed to these groups are updated with these permissions
+      await this.gibbonUser.subscribeToPermissionsForGroups(
+        groupsGibbon,
+        permissionGibbon,
+        s
       );
-    }
-
-    // First update groups with these permissions
-    await this.gibbonGroup.subscribePermissions(groupsGibbon, permissionGibbon);
-
-    // Ensure users subscribed to these groups are updated with these permissions
-    await this.gibbonUser.subscribeToPermissionsForGroups(
-      groupsGibbon,
-      permissionGibbon
-    );
+    });
   }
 
   /**
@@ -601,9 +710,14 @@ export class GibbonsMongoDb implements IPermissionsResource {
    * console.log(user.permissionsGibbon); // Empty Gibbon (no permissions yet)
    * ```
    */
-  async createUser<T>(data: T): Promise<IGibbonUser> {
+  async createUser<T>(data: T, session?: ClientSession): Promise<IGibbonUser> {
     const { groupByteLength, permissionByteLength } = this.config;
-    return this.gibbonUser.create(data, groupByteLength, permissionByteLength);
+    return this.gibbonUser.create(
+      data,
+      groupByteLength,
+      permissionByteLength,
+      session
+    );
   }
 
   /**
@@ -622,8 +736,11 @@ export class GibbonsMongoDb implements IPermissionsResource {
    * await gibbonsDb.removeUser({ _id: { $in: [id1, id2, id3] } });
    * ```
    */
-  async removeUser(filter: Filter<IGibbonUser>): Promise<number> {
-    return this.gibbonUser.remove(filter);
+  async removeUser(
+    filter: Filter<IGibbonUser>,
+    session?: ClientSession
+  ): Promise<number> {
+    return this.gibbonUser.remove(filter, session);
   }
 
   /**
@@ -703,9 +820,10 @@ export class GibbonsMongoDb implements IPermissionsResource {
    */
   public async updateGroupMetadata<T extends Record<string, unknown>>(
     groupPosition: number,
-    data: T
+    data: T,
+    session?: ClientSession
   ): Promise<IGibbonGroup | null> {
-    return this.gibbonGroup.updateMetadata(groupPosition, data);
+    return this.gibbonGroup.updateMetadata(groupPosition, data, session);
   }
 
   /**
@@ -727,9 +845,10 @@ export class GibbonsMongoDb implements IPermissionsResource {
    */
   public async updatePermissionMetadata<T extends Record<string, unknown>>(
     permissionPosition: number,
-    data: T
+    data: T,
+    session?: ClientSession
   ): Promise<IGibbonPermission | null> {
-    return this.gibbonPermission.updateMetadata(permissionPosition, data);
+    return this.gibbonPermission.updateMetadata(permissionPosition, data, session);
   }
 
   /**
@@ -750,14 +869,17 @@ export class GibbonsMongoDb implements IPermissionsResource {
    */
   public async updateUserMetadata<T extends Record<string, unknown>>(
     filter: Filter<IGibbonUser>,
-    data: T
+    data: T,
+    session?: ClientSession
   ): Promise<IGibbonUser | null> {
-    return this.gibbonUser.updateMetadata(filter, data);
+    return this.gibbonUser.updateMetadata(filter, data, session);
   }
 
   /**
    * Unsubscribe users matching filter from specific groups
    * Recalculates their permissions from remaining groups
+   *
+   * Runs inside a transaction for atomicity.
    *
    * @param filter - MongoDB filter to select users
    * @param groups - Group positions to remove from users
@@ -774,15 +896,26 @@ export class GibbonsMongoDb implements IPermissionsResource {
    */
   async unsubscribeUsersFromGroups(
     filter: Filter<IGibbonUser>,
-    groups: GibbonLike
+    groups: GibbonLike,
+    session?: ClientSession
   ): Promise<void> {
-    const groupsGibbon = this.gibbonGroup.ensureGibbon(groups);
-    await this.gibbonUser.unsubscribeFromGroups(filter, groupsGibbon, this);
+    await this.executeInSession(session, async (s) => {
+      const groupsGibbon = this.gibbonGroup.ensureGibbon(groups);
+      const permissionsResource = this.sessionAwarePermissionsResource(s);
+      await this.gibbonUser.unsubscribeFromGroups(
+        filter,
+        groupsGibbon,
+        permissionsResource,
+        s
+      );
+    });
   }
 
   /**
    * Remove specific permissions from specific groups
    * Recalculates permissions for all users in affected groups
+   *
+   * Runs inside a transaction for atomicity.
    *
    * @param groups - Group positions to modify
    * @param permissions - Permission positions to remove from groups
@@ -799,22 +932,28 @@ export class GibbonsMongoDb implements IPermissionsResource {
    */
   async unsubscribePermissionsFromGroups(
     groups: GibbonLike,
-    permissions: GibbonLike
+    permissions: GibbonLike,
+    session?: ClientSession
   ): Promise<void> {
-    const groupsGibbon = this.gibbonGroup.ensureGibbon(groups);
-    const permissionsGibbon = this.gibbonPermission.ensureGibbon(permissions);
+    await this.executeInSession(session, async (s) => {
+      const groupsGibbon = this.gibbonGroup.ensureGibbon(groups);
+      const permissionsGibbon = this.gibbonPermission.ensureGibbon(permissions);
+      const permissionsResource = this.sessionAwarePermissionsResource(s);
 
-    // 1. Remove permissions from the specified groups
-    await this.gibbonGroup.unsubscribePermissions(
-      groupsGibbon,
-      permissionsGibbon
-    );
+      // 1. Remove permissions from the specified groups
+      await this.gibbonGroup.unsubscribePermissions(
+        groupsGibbon,
+        permissionsGibbon,
+        s
+      );
 
-    // 2. Recalculate permissions for all users in those groups
-    const groupsBinary = new Binary(groupsGibbon.toBuffer());
-    await this.gibbonUser.recalculatePermissions(
-      { groupsGibbon: { $bitsAnySet: groupsBinary } } as Filter<IGibbonUser>,
-      this
-    );
+      // 2. Recalculate permissions for all users in those groups
+      const groupsBinary = new Binary(groupsGibbon.toBuffer());
+      await this.gibbonUser.recalculatePermissions(
+        { groupsGibbon: { $bitsAnySet: groupsBinary } } as Filter<IGibbonUser>,
+        permissionsResource,
+        s
+      );
+    });
   }
 }

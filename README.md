@@ -2,553 +2,208 @@
 
 # Gibbons for MongoDB
 
-A high-performance library to manage user groups and user permissions in [MongoDB](https://www.mongodb.com/) using bitwise operations with [Gibbons](https://github.com/icazemier/gibbons).
+Manage user groups and permissions in [MongoDB](https://www.mongodb.com/) using bitwise operations with [Gibbons](https://github.com/icazemier/gibbons). Store and query thousands of permissions using minimal space.
 
-## Features
-
--   ⚡ **Bitwise efficiency** - Store and query thousands of permissions/groups using minimal space
--   🔍 **Fast queries** - Leverage MongoDB's bitwise operators for lightning-fast permission checks
--   🎯 **Type-safe** - Full TypeScript support with comprehensive type definitions
--   📦 **Easy setup** - CLI tool for database initialization
--   🔄 **Flexible** - Works with existing user collections
-
-## What this is NOT
-
--   An ORM (Object-Relational Mapper)
--   A complete auth/authentication solution
--   A replacement for your existing user management system
-
-## Quick Example
-
-```typescript
-import { GibbonsMongoDb, ConfigLoader } from "@icazemier/gibbons-mongodb";
-
-// Initialize
-const config = await ConfigLoader.load();
-const gibbonsDb = new GibbonsMongoDb("mongodb://localhost:27017", config);
-await gibbonsDb.initialize();
-
-// Allocate permissions
-const editPerm = await gibbonsDb.allocatePermission({ name: "posts.edit" });
-const deletePerm = await gibbonsDb.allocatePermission({ name: "posts.delete" });
-
-// Create a group with permissions
-const adminGroup = await gibbonsDb.allocateGroup({ name: "Admins" });
-await gibbonsDb.subscribePermissionsToGroups(
-    [adminGroup.gibbonGroupPosition],
-    [editPerm.gibbonPermissionPosition, deletePerm.gibbonPermissionPosition]
-);
-
-// Create user and assign to group
-const user = await gibbonsDb.createUser({
-    name: "John",
-    email: "john@example.com"
-});
-await gibbonsDb.subscribeUsersToGroups(
-    { _id: user._id },
-    [adminGroup.gibbonGroupPosition]
-);
-
-// Validate permissions
-const hasEdit = gibbonsDb.validateUserPermissionsForAnyPermissions(
-    user.permissionsGibbon,
-    [editPerm.gibbonPermissionPosition]
-);
-console.log("User can edit:", hasEdit); // true
-```
-
-## How It Works
-
-Gibbons uses MongoDB's `Binary` data type to store bitwise masks. Each bit represents a group or permission position, allowing you to:
-
--   Store thousands of permissions in a few bytes
--   Use MongoDB's `$bitsAnySet`, `$bitsAllSet` operators for fast queries
--   Aggregate permissions from multiple groups automatically
-
-Example MongoDB query:
-
-```typescript
-import { Gibbon } from "@icazemier/gibbons";
-
-const gibbon = Gibbon.create(256).setPosition(1).setPosition(3);
-const cursor = mongoClient
-    .db("mydb")
-    .collection("users")
-    .find({
-        groupsGibbon: {
-            $bitsAnySet: gibbon.toBuffer(),
-        },
-    });
-```
-
-# Installation
+## Install
 
 ```bash
 npm install @icazemier/gibbons-mongodb
 ```
 
-# Setup
+## Quick Start
 
-## 1. Configuration File
+### 1. Create a config file
 
-Create a configuration file that Gibbons can discover. We use [cosmiconfig](https://github.com/davidtheclark/cosmiconfig#readme), so you can use any of these formats:
-
--   `.gibbons-mongodbrc.json` (recommended)
--   `.gibbons-mongodbrc.yaml`
--   `gibbons-mongodb` property in `package.json`
--   And more (see cosmiconfig docs)
-
-### Configuration Structure
-
-**⚠️ IMPORTANT:** Config settings affect how data is stored. Changing these on a live system can break existing data!
-
-Example `.gibbons-mongodbrc.json`:
+`.gibbons-mongodbrc.json` in your project root:
 
 ```json
 {
+    "dbName": "myapp",
     "permissionByteLength": 256,
     "groupByteLength": 256,
     "mongoDbMutationConcurrency": 10,
     "dbStructure": {
-        "user": {
-            "dbName": "myapp",
-            "collectionName": "users"
-        },
-        "group": {
-            "dbName": "myapp",
-            "collectionName": "groups"
-        },
-        "permission": {
-            "dbName": "myapp",
-            "collectionName": "permissions"
-        }
+        "user": { "collectionName": "users" },
+        "group": { "collectionName": "groups" },
+        "permission": { "collectionName": "permissions" }
     }
 }
 ```
 
-### Configuration Options
-
-| Option                        | Type   | Description                                                                 |
-| ----------------------------- | ------ | --------------------------------------------------------------------------- |
-| `permissionByteLength`        | number | Bytes for permission Gibbon (e.g., 256 = 2,048 possible permissions)       |
-| `groupByteLength`             | number | Bytes for group Gibbon (e.g., 256 = 2,048 possible groups)                 |
-| `mongoDbMutationConcurrency`  | number | Concurrency limit for bulk operations                                       |
-| `dbStructure.user`            | object | User collection config - can point to existing collection                  |
-| `dbStructure.group`           | object | Group collection config - will be created/managed by Gibbons               |
-| `dbStructure.permission`      | object | Permission collection config - will be created/managed by Gibbons          |
-
-**Note:** The user collection can be an existing one. Gibbons adds `groupsGibbon` and `permissionsGibbon` fields without affecting other fields.
-
-## 2. Initialize Database
-
-Run the CLI tool to populate groups and permissions collections:
+### 2. Seed the database
 
 ```bash
-# Using default config
 npx gibbons-mongodb init --uri mongodb://localhost:27017
-
-# Using custom config file
-npx gibbons-mongodb init --uri mongodb://localhost:27017 --config ./my-config.json
-
-# Or use the alias
-npx @icazemier/gibbons-mongodb init -u mongodb://localhost:27017
 ```
 
-This creates:
--   `permissionByteLength * 8` non-allocated permission slots
--   `groupByteLength * 8` non-allocated group slots
+This creates pre-allocated permission and group slots. With 256 bytes you get 2,048 slots each.
 
-For 256 bytes each, that's **2,048 groups** and **2,048 permissions** ready to allocate!
-
-# Usage
-
-## Initialize the Library
+### 3. Use it
 
 ```typescript
 import { GibbonsMongoDb, ConfigLoader } from "@icazemier/gibbons-mongodb";
 
-// Load config (searches for .gibbons-mongodbrc files)
 const config = await ConfigLoader.load();
-
-// Or load from specific file
-const config = await ConfigLoader.load("gibbons-mongodb", "./custom-config.json");
-
-// Create instance
 const gibbonsDb = new GibbonsMongoDb("mongodb://localhost:27017", config);
-
-// Initialize (connects to MongoDB and sets up collections)
 await gibbonsDb.initialize();
-```
 
-## Managing Permissions
+// Create permissions
+const editPerm = await gibbonsDb.allocatePermission({ name: "posts.edit" });
+const deletePerm = await gibbonsDb.allocatePermission({ name: "posts.delete" });
 
-```typescript
-// Allocate new permissions
-const createPost = await gibbonsDb.allocatePermission({
-    name: "posts.create",
-    description: "Create new blog posts",
-});
-
-const editPost = await gibbonsDb.allocatePermission({
-    name: "posts.edit",
-    description: "Edit any blog post",
-});
-
-const deletePost = await gibbonsDb.allocatePermission({
-    name: "posts.delete",
-    description: "Delete any blog post",
-});
-
-console.log(createPost.gibbonPermissionPosition); // e.g., 1
-console.log(createPost.gibbonIsAllocated); // true
-
-// Update permission metadata
-await gibbonsDb.updatePermissionMetadata(createPost.gibbonPermissionPosition, {
-    description: "Create and publish blog posts",
-    module: "blog",
-});
-
-// List all allocated permissions
-const permissionsCursor = gibbonsDb.findAllAllocatedPermissions();
-for await (const perm of permissionsCursor) {
-    console.log(perm.name, perm.gibbonPermissionPosition);
-}
-
-// Deallocate permissions (removes from groups and users)
-await gibbonsDb.deallocatePermissions([deletePost.gibbonPermissionPosition]);
-```
-
-## Managing Groups
-
-```typescript
-// Allocate new groups
-const admins = await gibbonsDb.allocateGroup({
-    name: "Admins",
-    description: "Full system access",
-});
-
-const editors = await gibbonsDb.allocateGroup({
-    name: "Editors",
-    description: "Content editors",
-});
-
-// Assign permissions to groups
+// Create a group and assign permissions
+const admins = await gibbonsDb.allocateGroup({ name: "Admins" });
 await gibbonsDb.subscribePermissionsToGroups(
     [admins.gibbonGroupPosition],
-    [createPost.gibbonPermissionPosition, editPost.gibbonPermissionPosition, deletePost.gibbonPermissionPosition]
+    [editPerm.gibbonPermissionPosition, deletePerm.gibbonPermissionPosition]
 );
 
-await gibbonsDb.subscribePermissionsToGroups(
-    [editors.gibbonGroupPosition],
-    [createPost.gibbonPermissionPosition, editPost.gibbonPermissionPosition]
+// Create a user and assign to group
+const user = await gibbonsDb.createUser({ name: "Alice", email: "alice@example.com" });
+await gibbonsDb.subscribeUsersToGroups({ _id: user._id }, [admins.gibbonGroupPosition]);
+
+// Check permissions
+const canEdit = gibbonsDb.validateUserPermissionsForAnyPermissions(
+    user.permissionsGibbon,
+    [editPerm.gibbonPermissionPosition]
 );
-
-// Update group metadata
-await gibbonsDb.updateGroupMetadata(admins.gibbonGroupPosition, {
-    color: "#FF0000",
-    priority: 1,
-});
-
-// Find groups by permissions
-const groupsWithDelete = gibbonsDb.findGroupsByPermissions([deletePost.gibbonPermissionPosition]);
-for await (const group of groupsWithDelete) {
-    console.log(`${group.name} can delete posts`);
-}
-
-// Remove permissions from groups
-await gibbonsDb.unsubscribePermissionsFromGroups(
-    [editors.gibbonGroupPosition],
-    [createPost.gibbonPermissionPosition]
-);
-
-// Deallocate groups (removes from users)
-await gibbonsDb.deallocateGroups([editors.gibbonGroupPosition]);
+// canEdit === true
 ```
 
-## Managing Users
+## Using Your Own MongoClient
+
+You can inject an existing `MongoClient` instead of a URI. This lets you create sessions from your own client and pass them to any method for transactional control:
 
 ```typescript
-// Create users
-const user1 = await gibbonsDb.createUser({
-    name: "Alice",
-    email: "alice@example.com",
-    username: "alice",
-});
+import { MongoClient } from "mongodb";
+import { GibbonsMongoDb, ConfigLoader, withTransaction } from "@icazemier/gibbons-mongodb";
 
-const user2 = await gibbonsDb.createUser({
-    name: "Bob",
-    email: "bob@example.com",
-    username: "bob",
-});
+const client = await MongoClient.connect("mongodb://localhost:27017");
+const config = await ConfigLoader.load();
 
-// Assign users to groups
-await gibbonsDb.subscribeUsersToGroups(
-    { email: "alice@example.com" },
-    [admins.gibbonGroupPosition]
-);
+const gibbonsDb = new GibbonsMongoDb(client, config);
+await gibbonsDb.initialize();
 
-await gibbonsDb.subscribeUsersToGroups(
-    { _id: user2._id },
-    [editors.gibbonGroupPosition]
-);
-
-// Find users by groups
-const adminUsers = gibbonsDb.findUsersByGroups([admins.gibbonGroupPosition]);
-for await (const user of adminUsers) {
-    console.log(`${user.name} is an admin`);
-}
-
-// Find users by permissions
-const usersWhoCanEdit = gibbonsDb.findUsersByPermissions([editPost.gibbonPermissionPosition]);
-
-// Find users with custom filter
-const activeUsers = gibbonsDb.findUsers({
-    status: "active",
-    createdAt: { $gte: new Date("2024-01-01") },
-});
-
-// Remove users from groups
-await gibbonsDb.unsubscribeUsersFromGroups(
-    { email: "bob@example.com" },
-    [editors.gibbonGroupPosition]
-);
-
-// Delete users
-const deletedCount = await gibbonsDb.removeUser({ email: "bob@example.com" });
-console.log(`Deleted ${deletedCount} user(s)`);
-```
-
-## Permission Validation
-
-```typescript
-// Fetch user with populated gibbons
-const user = await gibbonsDb.findUsers({ email: "alice@example.com" }).next();
-
-if (user) {
-    // Check if user has ALL specified permissions
-    const canEditAndDelete = gibbonsDb.validateUserPermissionsForAllPermissions(
-        user.permissionsGibbon,
-        [editPost.gibbonPermissionPosition, deletePost.gibbonPermissionPosition]
+// Wrap multiple operations in a single transaction
+await withTransaction(client, async (session) => {
+    const perm = await gibbonsDb.allocatePermission({ name: "reports.view" }, session);
+    const group = await gibbonsDb.allocateGroup({ name: "Viewers" }, session);
+    await gibbonsDb.subscribePermissionsToGroups(
+        [group.gibbonGroupPosition],
+        [perm.gibbonPermissionPosition],
+        session
     );
-
-    // Check if user has ANY of the specified permissions
-    const canModify = gibbonsDb.validateUserPermissionsForAnyPermissions(
-        user.permissionsGibbon,
-        [editPost.gibbonPermissionPosition, deletePost.gibbonPermissionPosition]
-    );
-
-    // Check if user has ALL specified groups
-    const isAdmin = gibbonsDb.validateUserGroupsForAllGroups(
-        user.groupsGibbon,
-        [admins.gibbonGroupPosition]
-    );
-
-    // Check if user has ANY of the specified groups
-    const isStaff = gibbonsDb.validateUserGroupsForAnyGroups(
-        user.groupsGibbon,
-        [admins.gibbonGroupPosition, editors.gibbonGroupPosition]
-    );
-
-    console.log({
-        canEditAndDelete,
-        canModify,
-        isAdmin,
-        isStaff,
-    });
-}
+});
 ```
 
-## Database Validation
+Every public method accepts an optional `session` parameter. When omitted, multi-step methods automatically use an internal transaction.
 
-```typescript
-// Verify groups are allocated before using them
-const groupsValid = await gibbonsDb.validateAllocatedGroups([1, 2, 3]);
-if (!groupsValid) {
-    throw new Error("Some groups are not allocated");
-}
+## API Overview
 
-// Verify permissions are allocated
-const permsValid = await gibbonsDb.validateAllocatedPermissions([5, 6, 7]);
-```
+### Permissions
 
-## Working with Gibbons Directly
+| Method | Description |
+|--------|-------------|
+| `allocatePermission(data, session?)` | Allocate a new permission slot |
+| `deallocatePermissions(positions, session?)` | Deallocate and remove from groups/users |
+| `updatePermissionMetadata(position, data, session?)` | Update custom fields |
+| `findPermissions(positions)` | Find by positions |
+| `findAllAllocatedPermissions()` | List all allocated |
+| `validateAllocatedPermissions(positions)` | Check if allocated in DB |
 
-```typescript
-import { Gibbon } from "@icazemier/gibbons";
+### Groups
 
-// Get aggregated permissions from groups
-const permissionsGibbon = await gibbonsDb.getPermissionsGibbonForGroups([
-    admins.gibbonGroupPosition,
-    editors.gibbonGroupPosition,
-]);
+| Method | Description |
+|--------|-------------|
+| `allocateGroup(data, session?)` | Allocate a new group slot |
+| `deallocateGroups(positions, session?)` | Deallocate and remove from users |
+| `updateGroupMetadata(position, data, session?)` | Update custom fields |
+| `subscribePermissionsToGroups(groups, perms, session?)` | Add permissions to groups |
+| `unsubscribePermissionsFromGroups(groups, perms, session?)` | Remove permissions from groups |
+| `findGroups(positions)` | Find by positions |
+| `findGroupsByPermissions(positions)` | Find groups that have certain permissions |
+| `findAllAllocatedGroups()` | List all allocated |
+| `validateAllocatedGroups(positions)` | Check if allocated in DB |
 
-// Get positions as array
-const positions = permissionsGibbon.getPositionsArray();
-console.log("Permission positions:", positions); // e.g., [1, 2, 3, 5]
+### Users
 
-// Manual permission checks
-const hasPermission = permissionsGibbon.isPositionSet(editPost.gibbonPermissionPosition);
-```
+| Method | Description |
+|--------|-------------|
+| `createUser(data, session?)` | Create with empty gibbons |
+| `removeUser(filter, session?)` | Delete by filter |
+| `subscribeUsersToGroups(filter, groups, session?)` | Add users to groups |
+| `unsubscribeUsersFromGroups(filter, groups, session?)` | Remove users from groups |
+| `findUsers(filter)` | Query by MongoDB filter |
+| `findUsersByGroups(positions)` | Find by group membership |
+| `findUsersByPermissions(positions)` | Find by permission |
+| `updateUserMetadata(filter, data, session?)` | Update custom fields |
 
-# API Reference
+### Validation (synchronous, no DB call)
 
-For complete API documentation with examples, see the [TypeScript definitions](./src/index.ts) or check the TSDoc comments in your IDE.
+| Method | Description |
+|--------|-------------|
+| `validateUserPermissionsForAllPermissions(userPerms, perms)` | Has ALL permissions? |
+| `validateUserPermissionsForAnyPermissions(userPerms, perms)` | Has ANY permission? |
+| `validateUserGroupsForAllGroups(userGroups, groups)` | In ALL groups? |
+| `validateUserGroupsForAnyGroups(userGroups, groups)` | In ANY group? |
 
-## Main Classes
+### Utilities
 
--   **`GibbonsMongoDb`** - Main class for managing users, groups, and permissions
--   **`MongoDbSeeder`** - Seeds database with pre-allocated groups and permissions
--   **`ConfigLoader`** - Loads configuration from filesystem
+| Method/Function | Description |
+|--------|-------------|
+| `getMongoClient()` | Get the underlying MongoClient |
+| `getPermissionsGibbonForGroups(groups)` | Aggregate permissions from groups |
+| `withTransaction(client, fn)` | Run a callback inside a MongoDB transaction |
 
-## Key Methods
+## Config Options
 
-### GibbonsMongoDb
+| Option | Type | Description |
+|--------|------|-------------|
+| `dbName` | string | MongoDB database name |
+| `permissionByteLength` | number | Bytes for permissions (256 = 2,048 slots) |
+| `groupByteLength` | number | Bytes for groups (256 = 2,048 slots) |
+| `mongoDbMutationConcurrency` | number | Concurrency limit for bulk operations |
+| `dbStructure.user.collectionName` | string | User collection (can be existing) |
+| `dbStructure.group.collectionName` | string | Group collection (managed by Gibbons) |
+| `dbStructure.permission.collectionName` | string | Permission collection (managed by Gibbons) |
 
-#### Permissions
--   `allocatePermission<T>(data: T)` - Allocate new permission
--   `deallocatePermissions(permissions)` - Deallocate permissions
--   `updatePermissionMetadata(position, data)` - Update permission metadata
--   `findAllAllocatedPermissions()` - List all allocated permissions
--   `validateAllocatedPermissions(permissions)` - Validate permissions exist
+Config is loaded via [cosmiconfig](https://github.com/davidtheclark/cosmiconfig), so `.gibbons-mongodbrc.json`, `.yaml`, or a `gibbons-mongodb` key in `package.json` all work.
 
-#### Groups
--   `allocateGroup<T>(data: T)` - Allocate new group
--   `deallocateGroups(groups)` - Deallocate groups
--   `updateGroupMetadata(position, data)` - Update group metadata
--   `findGroups(groups)` - Find specific groups
--   `findGroupsByPermissions(permissions)` - Find groups with permissions
--   `findAllAllocatedGroups()` - List all allocated groups
--   `validateAllocatedGroups(groups)` - Validate groups exist
+## FAQ
 
-#### Users
--   `createUser<T>(data: T)` - Create new user
--   `removeUser(filter)` - Delete users
--   `findUsers(filter)` - Query users
--   `findUsersByGroups(groups)` - Find users by groups
--   `findUsersByPermissions(permissions)` - Find users by permissions
+**What is this?**
+A permissions library. It stores group memberships and permissions as compact bitmasks in MongoDB, using `$bitsAnySet` / `$bitsAllSet` for fast queries.
 
-#### Subscriptions
--   `subscribeUsersToGroups(filter, groups)` - Add users to groups
--   `subscribePermissionsToGroups(groups, permissions)` - Add permissions to groups
--   `unsubscribeUsersFromGroups(filter, groups)` - Remove users from groups
--   `unsubscribePermissionsFromGroups(groups, permissions)` - Remove permissions from groups
+**What is this NOT?**
+An ORM, an authentication solution, or a user management system. It only manages the group/permission layer.
 
-#### Validation
--   `validateUserGroupsForAllGroups(userGroups, groups)` - Check if user has all groups
--   `validateUserGroupsForAnyGroups(userGroups, groups)` - Check if user has any group
--   `validateUserPermissionsForAllPermissions(userPerms, perms)` - Check if user has all permissions
--   `validateUserPermissionsForAnyPermissions(userPerms, perms)` - Check if user has any permission
+**Can I use an existing user collection?**
+Yes. Gibbons adds `groupsGibbon` and `permissionsGibbon` fields without touching your other fields.
 
-# Advanced Topics
+**How many permissions/groups can I have?**
+`byteLength * 8`. So 256 bytes = 2,048, 1024 bytes = 8,192.
 
-## Data Structure
+**Can I change byte lengths later?**
+No. Changing them on a live system corrupts existing data. Choose generously upfront.
 
-### User Document
-```typescript
-{
-    _id: ObjectId,
-    // Your custom fields
-    name: "Alice",
-    email: "alice@example.com",
-    // Gibbons-managed fields
-    groupsGibbon: Binary,        // Bitwise mask of group memberships
-    permissionsGibbon: Binary,   // Aggregated permissions from groups
-}
-```
+**Do I need a replica set for transactions?**
+Yes. MongoDB transactions require a replica set (or sharded cluster). Standalone servers don't support them, but you can still use all methods without the `session` parameter.
 
-### Group Document
-```typescript
-{
-    _id: ObjectId,
-    gibbonGroupPosition: 1,      // Unique position (1-based)
-    gibbonIsAllocated: true,     // Allocation status
-    permissionsGibbon: Binary,   // Bitwise mask of permissions
-    // Your custom fields
-    name: "Admins",
-    description: "Full access",
-}
-```
+**Can I pass my own MongoClient?**
+Yes. `new GibbonsMongoDb(myClient, config)` reuses your client, so sessions you create from it work with all facade methods.
 
-### Permission Document
-```typescript
-{
-    _id: ObjectId,
-    gibbonPermissionPosition: 5, // Unique position (1-based)
-    gibbonIsAllocated: true,     // Allocation status
-    // Your custom fields
-    name: "posts.edit",
-    description: "Edit posts",
-}
-```
+**How do transactions work?**
+Multi-step methods (deallocate, subscribe, unsubscribe) auto-wrap in a transaction when no `session` is passed. To combine multiple calls in one transaction, pass your own `session`.
 
-## MongoDB Queries
+**What happens when all slots are used?**
+`allocatePermission` / `allocateGroup` throws. Increase the byte length in config and re-seed.
 
-You can query directly using MongoDB's bitwise operators:
-
-```typescript
-import { Binary } from "mongodb";
-import { Gibbon } from "@icazemier/gibbons";
-
-// Find users with specific permissions
-const gibbon = Gibbon.create(256)
-    .setPosition(editPost.gibbonPermissionPosition)
-    .setPosition(deletePost.gibbonPermissionPosition);
-
-const users = await db.collection("users").find({
-    permissionsGibbon: {
-        $bitsAllSet: new Binary(gibbon.toBuffer()),
-    },
-}).toArray();
-```
-
-## Environment Variables
-
--   `GIBBONS_ENCODE_FROM_TO_STRING` - Controls whether Gibbons encodes to UTF-16 string or Buffer (see [Gibbons docs](https://github.com/icazemier/gibbons))
-
-# Best Practices
-
-1. **Choose appropriate byte lengths** - Calculate based on your maximum expected permissions/groups:
-   -   256 bytes = 2,048 items
-   -   512 bytes = 4,096 items
-   -   1024 bytes = 8,192 items
-
-2. **Don't change byte lengths on live systems** - This will corrupt existing data
-
-3. **Use meaningful names** - Store descriptive names/descriptions with permissions and groups for easier management
-
-4. **Aggregate permissions through groups** - Don't assign permissions directly to users; use groups for better maintainability
-
-5. **Validate before operations** - Always check if groups/permissions are allocated before using them
-
-6. **Monitor allocation usage** - Keep track of how many slots you've used vs. available
-
-7. **Backup before migrations** - Config changes can affect data structure
-
-# Troubleshooting
-
-## "Could not load config"
-Make sure you have a `.gibbons-mongodbrc.json` (or equivalent) in your project root or run `npx gibbons-mongodb init` with `--config` flag.
-
-## "Not able to allocate permission/group"
-All slots are used. Increase `permissionByteLength` or `groupByteLength` in config, reinitialize database.
-
-## "Called populateGroupsAndPermissions, but permissions and groups seem to be populated already"
-Database is already initialized. This is expected on subsequent runs.
-
-# License
+## License
 
 MIT
 
-# Contributing
+## Contributing
 
-Issues and pull requests welcome! See [repository](https://github.com/icazemier/gibbons-mongodb) for details.
+Issues and PRs welcome at [github.com/icazemier/gibbons-mongodb](https://github.com/icazemier/gibbons-mongodb).
 
-## For Contributors
-
-This project uses automated semantic versioning. Please use conventional commits:
-
-```bash
-npm run commit  # Interactive commit tool
-```
-
-See [SEMANTIC-VERSIONING-QUICKSTART.md](SEMANTIC-VERSIONING-QUICKSTART.md) for details.
+This project uses [conventional commits](https://www.conventionalcommits.org/) with automated semantic versioning. See [SEMANTIC-VERSIONING-QUICKSTART.md](SEMANTIC-VERSIONING-QUICKSTART.md) for details.

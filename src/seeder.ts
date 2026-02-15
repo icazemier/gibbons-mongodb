@@ -57,8 +57,25 @@ export class MongoDbSeeder {
   }
 
   /**
-   * Ensures the "group" collection is populated containing non-allocated groups.
-   * Uses batch inserts for performance.
+   * Creates unique indexes on position fields to prevent duplicate slots.
+   * @private
+   */
+  private async ensureIndexes(): Promise<void> {
+    await Promise.all([
+      this.dbCollection.group.createIndex(
+        { gibbonGroupPosition: 1 },
+        { unique: true }
+      ),
+      this.dbCollection.permission.createIndex(
+        { gibbonPermissionPosition: 1 },
+        { unique: true }
+      ),
+    ]);
+  }
+
+  /**
+   * Populates the "group" collection with non-allocated group slots.
+   * Skips positions that already exist (via unique index).
    * @private
    */
   protected async populateGroups(): Promise<void> {
@@ -75,19 +92,23 @@ export class MongoDbSeeder {
       });
 
       if (batch.length >= BATCH_SIZE) {
-        await this.dbCollection.group.insertMany(batch);
+        await this.dbCollection.group.insertMany(batch, { ordered: false }).catch(
+          (err) => this.ignoreDuplicateKeyErrors(err)
+        );
         batch.length = 0;
       }
     }
 
     if (batch.length > 0) {
-      await this.dbCollection.group.insertMany(batch);
+      await this.dbCollection.group.insertMany(batch, { ordered: false }).catch(
+        (err) => this.ignoreDuplicateKeyErrors(err)
+      );
     }
   }
 
   /**
-   * Ensures the "permission" collection is populated containing non-allocated permissions.
-   * Uses batch inserts for performance.
+   * Populates the "permission" collection with non-allocated permission slots.
+   * Skips positions that already exist (via unique index).
    * @private
    */
   private async populatePermissions(): Promise<void> {
@@ -101,51 +122,65 @@ export class MongoDbSeeder {
       });
 
       if (batch.length >= BATCH_SIZE) {
-        await this.dbCollection.permission.insertMany(batch);
+        await this.dbCollection.permission.insertMany(batch, { ordered: false }).catch(
+          (err) => this.ignoreDuplicateKeyErrors(err)
+        );
         batch.length = 0;
       }
     }
 
     if (batch.length > 0) {
-      await this.dbCollection.permission.insertMany(batch);
+      await this.dbCollection.permission.insertMany(batch, { ordered: false }).catch(
+        (err) => this.ignoreDuplicateKeyErrors(err)
+      );
     }
   }
 
   /**
-   * Initialize: prepopulates groups and permissions if not already done.
+   * Re-throws any error that is not a MongoDB duplicate key error (code 11000).
+   * Used with `insertMany({ ordered: false })` so existing documents are silently skipped
+   * while genuine failures still surface.
+   * @private
    */
-  async initialize(): Promise<void> {
-    return this.populateGroupsAndPermissions();
+  private ignoreDuplicateKeyErrors(err: unknown): void {
+    const code = (err as { code?: number }).code;
+    if (code !== 11000) {
+      throw err;
+    }
   }
 
   /**
-   * This ensures we pre-populate the database collections with groups and permissions ensuring we've got the sequence in order
-   * When called multiple times, we skip seeding
-   * @returns {Promise<void>}
+   * Initialize: creates unique indexes and populates groups/permissions
+   * if not already done. Safe to call multiple times — existing data is never overwritten.
+   */
+  async initialize(): Promise<void> {
+    await this.ensureIndexes();
+    await Promise.all([this.populateGroups(), this.populatePermissions()]);
+  }
+
+  /**
+   * @deprecated Use {@link initialize} instead. This method throws when data
+   * already exists; `initialize()` is idempotent and safe to call repeatedly.
    */
   async populateGroupsAndPermissions(): Promise<void> {
-    const countGroups = this.dbCollection.group.countDocuments(
-      {
-        gibbonIsAllocated: { $exists: true },
-      },
-      { limit: 1 }
-    );
+    const [countGroups, countPermissions] = await Promise.all([
+      this.dbCollection.group.countDocuments(
+        { gibbonIsAllocated: { $exists: true } },
+        { limit: 1 }
+      ),
+      this.dbCollection.permission.countDocuments(
+        { gibbonIsAllocated: { $exists: true } },
+        { limit: 1 }
+      ),
+    ]);
 
-    const countPermissions = this.dbCollection.permission.countDocuments(
-      {
-        gibbonIsAllocated: { $exists: true },
-      },
-      { limit: 1 }
-    );
-
-    const [count1, count2] = await Promise.all([countGroups, countPermissions]);
-
-    if ((count1 | count2) !== 0x0) {
+    if (countGroups > 0 || countPermissions > 0) {
       throw new Error(
         `Called populateGroupsAndPermissions, but permissions and groups seem to be populated already`
       );
     }
 
+    await this.ensureIndexes();
     await Promise.all([this.populateGroups(), this.populatePermissions()]);
   }
 }

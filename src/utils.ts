@@ -1,3 +1,29 @@
+import { ClientSession, MongoClient } from 'mongodb';
+
+/**
+ * Runs a callback inside a MongoDB transaction using the convenient API.
+ * Handles session lifecycle, commit, abort, and transient-error retries automatically.
+ *
+ * @param client - Connected MongoClient instance
+ * @param fn - Async callback receiving the session; all DB operations inside should pass `{ session }`
+ * @returns The value returned by `fn`
+ */
+export async function withTransaction<T>(
+  client: MongoClient,
+  fn: (session: ClientSession) => Promise<T>
+): Promise<T> {
+  const session = client.startSession();
+  try {
+    let result!: T;
+    await session.withTransaction(async (s) => {
+      result = await fn(s);
+    });
+    return result;
+  } finally {
+    await session.endSession();
+  }
+}
+
 export class Utils {
   /**
    * Generates a sequence 1 - n (amount) to use as async generator

@@ -1,6 +1,7 @@
 import { Gibbon } from '@icazemier/gibbons';
 import {
   Binary,
+  ClientSession,
   Collection,
   FindCursor,
   FindOneAndUpdateOptions,
@@ -67,11 +68,13 @@ export class GibbonGroup extends GibbonModel {
    *
    * @param groups - Group positions to validate
    * @param allocated - When `true` (default), checks that groups are allocated; when `false`, checks they are not
+   * @param session - Optional MongoDB client session for transactional operations
    * @returns `true` if all given group positions match the expected allocation state
    */
   public async validate(
     groups: GibbonLike,
-    allocated = true
+    allocated = true,
+    session?: ClientSession
   ): Promise<boolean> {
     const groupPositions = this.ensureGibbon(groups).getPositionsArray();
 
@@ -82,7 +85,7 @@ export class GibbonGroup extends GibbonModel {
       gibbonIsAllocated: allocated ? true : { $ne: true },
     };
 
-    const count = await this.dbCollection.countDocuments(filter);
+    const count = await this.dbCollection.countDocuments(filter, { session });
     return count === groupPositions.length;
   }
 
@@ -91,9 +94,13 @@ export class GibbonGroup extends GibbonModel {
    * Useful for computing a user's aggregated permissions from their group memberships.
    *
    * @param groups - Group positions to collect permissions from
+   * @param session - Optional MongoDB client session for transactional operations
    * @returns A Gibbon with all permissions from the given groups merged together
    */
-  async getPermissionsGibbonForGroups(groups: GibbonLike): Promise<Gibbon> {
+  async getPermissionsGibbonForGroups(
+    groups: GibbonLike,
+    session?: ClientSession
+  ): Promise<Gibbon> {
     const groupPositions = this.ensureGibbon(groups).getPositionsArray();
 
     const filter = {
@@ -108,7 +115,7 @@ export class GibbonGroup extends GibbonModel {
     };
 
     // Get FindCursor instance for groups groups
-    const groupCursor = this.dbCollection.find(filter, { projection });
+    const groupCursor = this.dbCollection.find(filter, { projection, session });
 
     // Create fresh permissions space as we're rebuilding permissions scratch
     const permissionGibbon = Gibbon.create(this.byteLength);
@@ -169,10 +176,11 @@ export class GibbonGroup extends GibbonModel {
    * and stores the given additional data.
    *
    * @param data - Additional data to store on the group document (e.g. name, description)
+   * @param session - Optional MongoDB client session for transactional operations
    * @returns The newly allocated group document
    * @throws Error when all group slots are already allocated
    */
-  async allocate<T>(data: T): Promise<IGibbonGroup> {
+  async allocate<T>(data: T, session?: ClientSession): Promise<IGibbonGroup> {
     // Query for a non-allocated group
     const filter = {
       gibbonIsAllocated: false,
@@ -182,6 +190,7 @@ export class GibbonGroup extends GibbonModel {
     const options = {
       returnDocument: 'after',
       sort: ['gibbonGroupPosition', 1],
+      session,
     } as FindOneAndUpdateOptions;
 
     // Prepare an update, ensure we allocate
@@ -210,8 +219,12 @@ export class GibbonGroup extends GibbonModel {
    * and unsets those permission bits.
    *
    * @param permissions - Permission positions to unset from groups
+   * @param session - Optional MongoDB client session for transactional operations
    */
-  async unsetPermissions(permissions: GibbonLike): Promise<void> {
+  async unsetPermissions(
+    permissions: GibbonLike,
+    session?: ClientSession
+  ): Promise<void> {
     const permissionsToUnset = this.ensureGibbon(permissions);
     const permissionsToUnsetBinary = new Binary(permissionsToUnset.toBuffer());
     const permissionPositionsToUnset = permissionsToUnset.getPositionsArray();
@@ -224,7 +237,7 @@ export class GibbonGroup extends GibbonModel {
       },
     };
 
-    const groupCursor = this.dbCollection.find(filter);
+    const groupCursor = this.dbCollection.find(filter, { session });
     for await (const group of groupCursor) {
       const { gibbonGroupPosition } = group;
       const permissionBuffer = Buffer.from(
@@ -239,11 +252,15 @@ export class GibbonGroup extends GibbonModel {
         gibbonGroupPosition,
       };
       // Update permissions in this group
-      await this.dbCollection.updateOne(groupFilter, {
-        $set: {
-          permissionsGibbon,
+      await this.dbCollection.updateOne(
+        groupFilter,
+        {
+          $set: {
+            permissionsGibbon,
+          },
         },
-      });
+        { session }
+      );
     }
     await groupCursor.close();
   }
@@ -255,8 +272,9 @@ export class GibbonGroup extends GibbonModel {
    * Note: removing group membership from users is handled by the facade.
    *
    * @param groups - Group positions to deallocate
+   * @param session - Optional MongoDB client session for transactional operations
    */
-  async deallocate(groups: GibbonLike): Promise<void> {
+  async deallocate(groups: GibbonLike, session?: ClientSession): Promise<void> {
     const $in = this.ensureGibbon(groups).getPositionsArray();
 
     const filter = {
@@ -269,7 +287,10 @@ export class GibbonGroup extends GibbonModel {
       gibbonGroupPosition: 1,
     };
 
-    const groupCursor = this.dbCollection.find(filter, { projection });
+    const groupCursor = this.dbCollection.find(filter, {
+      projection,
+      session,
+    });
 
     for await (const group of groupCursor) {
       // Fetch position for update
@@ -287,7 +308,8 @@ export class GibbonGroup extends GibbonModel {
           permissionsGibbon: Gibbon.create(this.byteLength).toBuffer(),
           // Set to be available for allocations again
           gibbonIsAllocated: false,
-        }
+        },
+        { session }
       );
     }
     await groupCursor.close();
@@ -300,10 +322,12 @@ export class GibbonGroup extends GibbonModel {
    *
    * @param groups - Gibbon representing groups to update
    * @param permissions - Gibbon representing permissions to subscribe
+   * @param session - Optional MongoDB client session for transactional operations
    */
   async subscribePermissions(
     groups: Gibbon,
-    permissions: Gibbon
+    permissions: Gibbon,
+    session?: ClientSession
   ): Promise<void> {
     const groupCursor = this.dbCollection.find(
       {
@@ -314,6 +338,7 @@ export class GibbonGroup extends GibbonModel {
           gibbonGroupPosition: 1,
           permissionsGibbon: 1,
         },
+        session,
       }
     );
 
@@ -331,7 +356,8 @@ export class GibbonGroup extends GibbonModel {
               .mergeWithGibbon(permissions)
               .toBuffer(),
           },
-        }
+        },
+        { session }
       );
     }
     await groupCursor.close();
@@ -355,13 +381,15 @@ export class GibbonGroup extends GibbonModel {
    *
    * @param groupPosition - The position of the group to update
    * @param data - Key-value pairs to set on the group document
+   * @param session - Optional MongoDB client session for transactional operations
    * @returns The updated group document, or `null` if no allocated group was found at that position
    */
   public async updateMetadata<T extends Record<string, unknown>>(
     groupPosition: number,
-    data: T
+    data: T,
+    session?: ClientSession
   ): Promise<IGibbonGroup | null> {
-    const options: FindOneAndUpdateOptions = { returnDocument: 'after' };
+    const options: FindOneAndUpdateOptions = { returnDocument: 'after', session };
     const result = await this.dbCollection.findOneAndUpdate(
       { gibbonGroupPosition: groupPosition, gibbonIsAllocated: true },
       { $set: data as Partial<IGibbonGroup> },
@@ -378,10 +406,12 @@ export class GibbonGroup extends GibbonModel {
    *
    * @param groups - Gibbon representing groups to update
    * @param permissions - Gibbon representing permissions to unsubscribe
+   * @param session - Optional MongoDB client session for transactional operations
    */
   async unsubscribePermissions(
     groups: Gibbon,
-    permissions: Gibbon
+    permissions: Gibbon,
+    session?: ClientSession
   ): Promise<void> {
     const permissionPositionsToUnset = permissions.getPositionsArray();
 
@@ -394,6 +424,7 @@ export class GibbonGroup extends GibbonModel {
           gibbonGroupPosition: 1,
           permissionsGibbon: 1,
         },
+        session,
       }
     );
 
@@ -411,7 +442,8 @@ export class GibbonGroup extends GibbonModel {
               .unsetAllFromPositions(permissionPositionsToUnset)
               .toBuffer(),
           },
-        }
+        },
+        { session }
       );
     }
     await groupCursor.close();

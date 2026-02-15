@@ -1,6 +1,7 @@
 import { Gibbon } from '@icazemier/gibbons';
 import {
   Binary,
+  ClientSession,
   Collection,
   Filter,
   FindCursor,
@@ -105,8 +106,12 @@ export class GibbonUser extends GibbonModel {
    * and unsets those permission bits.
    *
    * @param permissions - Permission positions to unset from users
+   * @param session - Optional MongoDB client session for transactional operations
    */
-  async unsetPermissions(permissions: GibbonLike) {
+  async unsetPermissions(
+    permissions: GibbonLike,
+    session?: ClientSession
+  ) {
     const permissionsToUnset = this.ensureGibbon(permissions);
     const permissionPositionsToUnset = permissionsToUnset.getPositionsArray();
 
@@ -119,7 +124,7 @@ export class GibbonUser extends GibbonModel {
       },
     };
 
-    const userCursor = this.dbCollection.find(userFilter);
+    const userCursor = this.dbCollection.find(userFilter, { session });
 
     for await (const user of userCursor) {
       const permissionBuffer = Buffer.from(
@@ -137,7 +142,8 @@ export class GibbonUser extends GibbonModel {
           $set: {
             permissionsGibbon: gibbon.toBuffer(),
           },
-        }
+        },
+        { session }
       );
     }
     await userCursor.close();
@@ -149,10 +155,12 @@ export class GibbonUser extends GibbonModel {
    *
    * @param groups - Group positions to unset from users
    * @param permissionsResource - Resource used to recalculate permissions from remaining groups
+   * @param session - Optional MongoDB client session for transactional operations
    */
   async unsetGroups(
     groups: GibbonLike,
-    permissionsResource: IPermissionsResource
+    permissionsResource: IPermissionsResource,
+    session?: ClientSession
   ): Promise<void> {
     const groupsToUnset = this.ensureGibbon(groups);
     const groupsToDeallocateBinary = new Binary(groupsToUnset.toBuffer());
@@ -164,7 +172,7 @@ export class GibbonUser extends GibbonModel {
       },
     };
 
-    const userCursor = this.dbCollection.find(filter);
+    const userCursor = this.dbCollection.find(filter, { session });
 
     for await (const user of userCursor) {
       const { groupsGibbon: groupsGibbonBinary, _id } = user;
@@ -189,7 +197,8 @@ export class GibbonUser extends GibbonModel {
             groupsGibbon: groupsGibbon.toBuffer(),
             permissionsGibbon: permissionGibbon.toBuffer(),
           },
-        }
+        },
+        { session }
       );
     }
     await userCursor.close();
@@ -202,13 +211,15 @@ export class GibbonUser extends GibbonModel {
    * @param filter - MongoDB filter to select users
    * @param groups - Gibbon representing groups to subscribe
    * @param permissions - Gibbon representing permissions to subscribe
+   * @param session - Optional MongoDB client session for transactional operations
    */
   async subscribeToGroupsAndPermissions(
     filter: Filter<IGibbonUser>,
     groups: Gibbon,
-    permissions: Gibbon
+    permissions: Gibbon,
+    session?: ClientSession
   ): Promise<void> {
-    const userCursor = this.dbCollection.find(filter);
+    const userCursor = this.dbCollection.find(filter, { session });
 
     for await (const user of userCursor) {
       const groupsBuffer = Buffer.from((user.groupsGibbon as Binary).buffer);
@@ -227,7 +238,8 @@ export class GibbonUser extends GibbonModel {
               .mergeWithGibbon(permissions)
               .toBuffer(),
           },
-        }
+        },
+        { session }
       );
     }
     await userCursor.close();
@@ -239,10 +251,12 @@ export class GibbonUser extends GibbonModel {
    *
    * @param groups - Gibbon representing groups to match users against
    * @param permissions - Gibbon representing permissions to subscribe
+   * @param session - Optional MongoDB client session for transactional operations
    */
   async subscribeToPermissionsForGroups(
     groups: Gibbon,
-    permissions: Gibbon
+    permissions: Gibbon,
+    session?: ClientSession
   ): Promise<void> {
     const filter = {
       groupsGibbon: {
@@ -254,6 +268,7 @@ export class GibbonUser extends GibbonModel {
       projection: {
         permissionsGibbon: 1,
       },
+      session,
     });
 
     for await (const user of userCursor) {
@@ -270,7 +285,8 @@ export class GibbonUser extends GibbonModel {
               .mergeWithGibbon(permissions)
               .toBuffer(),
           },
-        }
+        },
+        { session }
       );
     }
     await userCursor.close();
@@ -282,13 +298,15 @@ export class GibbonUser extends GibbonModel {
    *
    * @param filter - MongoDB filter to select the user(s) to update
    * @param data - Key-value pairs to set on the user document(s)
+   * @param session - Optional MongoDB client session for transactional operations
    * @returns The updated user document, or null if no user was found
    */
   public async updateMetadata<T extends Record<string, unknown>>(
     filter: Filter<IGibbonUser>,
-    data: T
+    data: T,
+    session?: ClientSession
   ): Promise<IGibbonUser | null> {
-    const options: FindOneAndUpdateOptions = { returnDocument: 'after' };
+    const options: FindOneAndUpdateOptions = { returnDocument: 'after', session };
     const result = await this.dbCollection.findOneAndUpdate(
       filter,
       { $set: data as Partial<IGibbonUser> },
@@ -305,13 +323,15 @@ export class GibbonUser extends GibbonModel {
    * @param data - Additional data to store on the user document (e.g. name, email)
    * @param groupByteLength - Byte length for the groups Gibbon
    * @param permissionByteLength - Byte length for the permissions Gibbon
+   * @param session - Optional MongoDB client session for transactional operations
    * @returns The newly created user document
    * @throws Error when the user could not be inserted
    */
   async create<T>(
     data: T,
     groupByteLength: number,
-    permissionByteLength: number
+    permissionByteLength: number,
+    session?: ClientSession
   ): Promise<IGibbonUser> {
     const doc = {
       ...data,
@@ -319,18 +339,27 @@ export class GibbonUser extends GibbonModel {
       permissionsGibbon: Gibbon.create(permissionByteLength).toBuffer(),
     };
     const result = await this.dbCollection.insertOne(
-      doc as unknown as IGibbonUser
+      doc as unknown as IGibbonUser,
+      { session }
     );
-    const user = await this.dbCollection.findOne({ _id: result.insertedId });
+    const user = await this.dbCollection.findOne(
+      { _id: result.insertedId },
+      { session }
+    );
     if (!user) throw new Error('Failed to create user');
     return GibbonUser.mapPermissionsBinaryToGibbon(user);
   }
 
   /**
    * Remove user(s) matching the given filter
+   *
+   * @param session - Optional MongoDB client session for transactional operations
    */
-  async remove(filter: Filter<IGibbonUser>): Promise<number> {
-    const result = await this.dbCollection.deleteMany(filter);
+  async remove(
+    filter: Filter<IGibbonUser>,
+    session?: ClientSession
+  ): Promise<number> {
+    const result = await this.dbCollection.deleteMany(filter, { session });
     return result.deletedCount;
   }
 
@@ -346,11 +375,14 @@ export class GibbonUser extends GibbonModel {
   /**
    * Unsubscribe users matching filter from specific groups,
    * then recalculate their permissions from remaining groups
+   *
+   * @param session - Optional MongoDB client session for transactional operations
    */
   async unsubscribeFromGroups(
     filter: Filter<IGibbonUser>,
     groups: Gibbon,
-    permissionsResource: IPermissionsResource
+    permissionsResource: IPermissionsResource,
+    session?: ClientSession
   ): Promise<void> {
     const groupPositionsToUnset = groups.getPositionsArray();
     const groupsBinary = new Binary(groups.toBuffer());
@@ -361,7 +393,7 @@ export class GibbonUser extends GibbonModel {
       groupsGibbon: { $bitsAnySet: groupsBinary },
     } as Filter<IGibbonUser>;
 
-    const userCursor = this.dbCollection.find(combinedFilter);
+    const userCursor = this.dbCollection.find(combinedFilter, { session });
 
     for await (const user of userCursor) {
       const { _id } = user;
@@ -383,7 +415,8 @@ export class GibbonUser extends GibbonModel {
             groupsGibbon: groupsGibbon.toBuffer(),
             permissionsGibbon: permissionsGibbon.toBuffer(),
           },
-        }
+        },
+        { session }
       );
     }
     await userCursor.close();
@@ -392,12 +425,15 @@ export class GibbonUser extends GibbonModel {
   /**
    * Recalculate permissions for users matching the filter
    * based on their current group memberships
+   *
+   * @param session - Optional MongoDB client session for transactional operations
    */
   async recalculatePermissions(
     filter: Filter<IGibbonUser>,
-    permissionsResource: IPermissionsResource
+    permissionsResource: IPermissionsResource,
+    session?: ClientSession
   ): Promise<void> {
-    const userCursor = this.dbCollection.find(filter);
+    const userCursor = this.dbCollection.find(filter, { session });
 
     for await (const user of userCursor) {
       const { _id } = user;
@@ -413,7 +449,8 @@ export class GibbonUser extends GibbonModel {
           $set: {
             permissionsGibbon: permissionsGibbon.toBuffer(),
           },
-        }
+        },
+        { session }
       );
     }
     await userCursor.close();
