@@ -104,9 +104,15 @@ jobs:
       - name: Get latest version from npm
         id: version
         run: |
-          VERSION=$(npm view @icazemier/gibbons-mongodb version 2>/dev/null || echo "")
+          BRANCH="${GITHUB_REF##*/}"
+          if [ "$BRANCH" = "main" ] || [ "$BRANCH" = "master" ]; then
+            TAG="latest"
+          else
+            TAG="$BRANCH"
+          fi
+          VERSION=$(npm view @icazemier/gibbons-mongodb@"$TAG" version 2>/dev/null || echo "")
           if [ -z "$VERSION" ]; then
-            echo "No version found on npm, skipping JSR publish"
+            echo "No version found on npm for dist-tag '$TAG', skipping JSR publish"
             echo "skip=true" >> "$GITHUB_OUTPUT"
           else
             echo "version=$VERSION" >> "$GITHUB_OUTPUT"
