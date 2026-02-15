@@ -1,5 +1,6 @@
 import { cosmiconfig } from 'cosmiconfig';
 import { CosmiconfigResult } from 'cosmiconfig/dist/types.js';
+import { Config } from './interfaces/config.js';
 
 export class ConfigLoader {
   /**
@@ -21,7 +22,10 @@ export class ConfigLoader {
    *
    * @public
    */
-  public static async load(module = 'gibbons-mongodb', filepath?: string) {
+  public static async load(
+    module = 'gibbons-mongodb',
+    filepath?: string
+  ): Promise<Config> {
     const explorer = cosmiconfig(module || 'gibbons-mongodb');
 
     const configResult = (

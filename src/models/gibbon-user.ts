@@ -108,7 +108,10 @@ export class GibbonUser extends GibbonModel {
    * @param permissions - Permission positions to unset from users
    * @param session - Optional MongoDB client session for transactional operations
    */
-  async unsetPermissions(permissions: GibbonLike, session?: ClientSession) {
+  async unsetPermissions(
+    permissions: GibbonLike,
+    session?: ClientSession
+  ): Promise<void> {
     const permissionsToUnset = this.ensureGibbon(permissions);
     const permissionPositionsToUnset = permissionsToUnset.getPositionsArray();
 

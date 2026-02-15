@@ -10,7 +10,7 @@ import {
 export const tearDownGroupTestFixtures = async (
   mongoClient: MongoClient,
   config: Config
-) => {
+): Promise<void> => {
   await mongoClient
     .db(config.dbName)
     .collection(config.dbStructure.group.collectionName)
@@ -20,7 +20,7 @@ export const tearDownGroupTestFixtures = async (
 export const tearDownPermissionTestFixtures = async (
   mongoClient: MongoClient,
   config: Config
-) => {
+): Promise<void> => {
   await mongoClient
     .db(config.dbName)
     .collection(config.dbStructure.permission.collectionName)
@@ -30,7 +30,7 @@ export const tearDownPermissionTestFixtures = async (
 export const tearDownUserTestFixtures = async (
   mongoClient: MongoClient,
   config: Config
-) => {
+): Promise<void> => {
   await mongoClient
     .db(config.dbName)
     .collection(config.dbStructure.user.collectionName)
@@ -40,7 +40,7 @@ export const tearDownUserTestFixtures = async (
 export const seedUserTestFixtures = async (
   mongoClient: MongoClient,
   config: Config
-) => {
+): Promise<void> => {
   usersFixtures.forEach((user) => {
     const groups = Gibbon.decode(user.groupsGibbon).getPositionsArray();
 
@@ -64,7 +64,7 @@ export const seedUserTestFixtures = async (
 export const seedPermissionTestFixtures = async (
   mongoClient: MongoClient,
   config: Config
-) => {
+): Promise<void> => {
   const permissionsPromises = permissionsFixtures.map(
     ({ name, gibbonPermissionPosition, gibbonIsAllocated }) => {
       return mongoClient
@@ -83,7 +83,7 @@ export const seedPermissionTestFixtures = async (
 export const seedGroupTestFixtures = async (
   mongoClient: MongoClient,
   config: Config
-) => {
+): Promise<void> => {
   const groupPromises = groupsFixtures.map(
     ({ name, gibbonGroupPosition, permissionsGibbon, gibbonIsAllocated }) => {
       return mongoClient
@@ -102,7 +102,7 @@ export const seedGroupTestFixtures = async (
 export const seedTestFixtures = async (
   mongoClient: MongoClient,
   config: Config
-) => {
+): Promise<void> => {
   await seedPermissionTestFixtures(mongoClient, config);
   await seedGroupTestFixtures(mongoClient, config);
 };

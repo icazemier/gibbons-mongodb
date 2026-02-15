@@ -79,3 +79,47 @@ jobs:
           GIT_COMMITTER_NAME: github-actions[bot]
           GIT_COMMITTER_EMAIL: github-actions[bot]@users.noreply.github.com
         run: npx semantic-release
+
+  jsr:
+    name: Publish to JSR
+    needs: release
+    runs-on: ubuntu-latest
+    if: "!contains(github.event.head_commit.message, 'skip ci') && !contains(github.event.head_commit.message, 'skip release')"
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Get latest version from npm
+        id: version
+        run: |
+          VERSION=$(npm view @icazemier/gibbons-mongodb version 2>/dev/null || echo "")
+          if [ -z "$VERSION" ]; then
+            echo "No version found on npm, skipping JSR publish"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Update jsr.json version
+        if: steps.version.outputs.skip != 'true'
+        run: |
+          node -e "
+            const fs = require('fs');
+            const jsr = JSON.parse(fs.readFileSync('jsr.json', 'utf8'));
+            jsr.version = '${{ steps.version.outputs.version }}';
+            fs.writeFileSync('jsr.json', JSON.stringify(jsr, null, 2) + '\n');
+          "
+
+      - name: Publish to JSR
+        if: steps.version.outputs.skip != 'true'
+        run: npx jsr publish --allow-dirty

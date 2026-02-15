@@ -5,7 +5,7 @@ config();
 
 let replSet: MongoMemoryReplSet | undefined;
 
-export async function setup() {
+export async function setup(): Promise<void> {
   console.info('Setting up mongodb in memory replicaset');
 
   replSet = await MongoMemoryReplSet.create({
@@ -28,7 +28,7 @@ export async function setup() {
   process.env.MONGO_URI = replSet.getUri();
 }
 
-export async function teardown() {
+export async function teardown(): Promise<void> {
   if (replSet) {
     await replSet.stop();
   }

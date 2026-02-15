@@ -39,24 +39,11 @@ export class Utils {
    * }
    * ```
    */
-  public static sequenceGenerator(amount: number) {
-    return {
-      from: 1,
-      to: amount,
-
-      [Symbol.asyncIterator]() {
-        return {
-          current: this.from,
-          last: this.to,
-
-          async next() {
-            if (this.current <= this.last) {
-              return { done: false, value: this.current++ };
-            }
-            return { done: true };
-          },
-        };
-      },
-    };
+  public static async *sequenceGenerator(
+    amount: number
+  ): AsyncGenerator<number> {
+    for (let i = 1; i <= amount; i++) {
+      yield i;
+    }
   }
 }

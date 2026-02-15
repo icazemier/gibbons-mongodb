@@ -16,3 +16,4 @@ fixup.mjs
 CLAUDE.md
 **/*.spec.ts
 *.svg
+jsr.json
