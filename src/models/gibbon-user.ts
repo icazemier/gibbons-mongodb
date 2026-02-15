@@ -108,10 +108,7 @@ export class GibbonUser extends GibbonModel {
    * @param permissions - Permission positions to unset from users
    * @param session - Optional MongoDB client session for transactional operations
    */
-  async unsetPermissions(
-    permissions: GibbonLike,
-    session?: ClientSession
-  ) {
+  async unsetPermissions(permissions: GibbonLike, session?: ClientSession) {
     const permissionsToUnset = this.ensureGibbon(permissions);
     const permissionPositionsToUnset = permissionsToUnset.getPositionsArray();
 
@@ -306,7 +303,10 @@ export class GibbonUser extends GibbonModel {
     data: T,
     session?: ClientSession
   ): Promise<IGibbonUser | null> {
-    const options: FindOneAndUpdateOptions = { returnDocument: 'after', session };
+    const options: FindOneAndUpdateOptions = {
+      returnDocument: 'after',
+      session,
+    };
     const result = await this.dbCollection.findOneAndUpdate(
       filter,
       { $set: data as Partial<IGibbonUser> },
@@ -327,6 +327,58 @@ export class GibbonUser extends GibbonModel {
    * @returns The newly created user document
    * @throws Error when the user could not be inserted
    */
+  /**
+   * Resizes the `permissionsGibbon` field in every user document
+   * to the given byte length.
+   *
+   * @param newByteLength - Target byte length for permission gibbons
+   * @param session - Optional MongoDB client session for transactional operations
+   */
+  async resizePermissions(
+    newByteLength: number,
+    session?: ClientSession
+  ): Promise<void> {
+    const cursor = this.dbCollection.find({}, { session });
+    for await (const user of cursor) {
+      const resized = GibbonUser.resizeGibbon(
+        user.permissionsGibbon as Binary,
+        newByteLength
+      );
+      await this.dbCollection.updateOne(
+        { _id: user._id },
+        { $set: { permissionsGibbon: resized } },
+        { session }
+      );
+    }
+    await cursor.close();
+  }
+
+  /**
+   * Resizes the `groupsGibbon` field in every user document
+   * to the given byte length.
+   *
+   * @param newByteLength - Target byte length for group gibbons
+   * @param session - Optional MongoDB client session for transactional operations
+   */
+  async resizeGroups(
+    newByteLength: number,
+    session?: ClientSession
+  ): Promise<void> {
+    const cursor = this.dbCollection.find({}, { session });
+    for await (const user of cursor) {
+      const resized = GibbonUser.resizeGibbon(
+        user.groupsGibbon as Binary,
+        newByteLength
+      );
+      await this.dbCollection.updateOne(
+        { _id: user._id },
+        { $set: { groupsGibbon: resized } },
+        { session }
+      );
+    }
+    await cursor.close();
+  }
+
   async create<T>(
     data: T,
     groupByteLength: number,

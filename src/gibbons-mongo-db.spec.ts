@@ -108,9 +108,7 @@ describe('Happy flows', () => {
     const testUserfilter = {
       groupsGibbon: {
         $bitsAnySet: new Binary(
-          Gibbon.create(1024)
-            .setAllFromPositions(groupPositions)
-            .toBuffer()
+          Gibbon.create(1024).setAllFromPositions(groupPositions).toBuffer()
         ),
       },
     } as Filter<TestUser>;

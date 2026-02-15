@@ -92,17 +92,17 @@ export class MongoDbSeeder {
       });
 
       if (batch.length >= BATCH_SIZE) {
-        await this.dbCollection.group.insertMany(batch, { ordered: false }).catch(
-          (err) => this.ignoreDuplicateKeyErrors(err)
-        );
+        await this.dbCollection.group
+          .insertMany(batch, { ordered: false })
+          .catch((err) => this.ignoreDuplicateKeyErrors(err));
         batch.length = 0;
       }
     }
 
     if (batch.length > 0) {
-      await this.dbCollection.group.insertMany(batch, { ordered: false }).catch(
-        (err) => this.ignoreDuplicateKeyErrors(err)
-      );
+      await this.dbCollection.group
+        .insertMany(batch, { ordered: false })
+        .catch((err) => this.ignoreDuplicateKeyErrors(err));
     }
   }
 
@@ -122,17 +122,17 @@ export class MongoDbSeeder {
       });
 
       if (batch.length >= BATCH_SIZE) {
-        await this.dbCollection.permission.insertMany(batch, { ordered: false }).catch(
-          (err) => this.ignoreDuplicateKeyErrors(err)
-        );
+        await this.dbCollection.permission
+          .insertMany(batch, { ordered: false })
+          .catch((err) => this.ignoreDuplicateKeyErrors(err));
         batch.length = 0;
       }
     }
 
     if (batch.length > 0) {
-      await this.dbCollection.permission.insertMany(batch, { ordered: false }).catch(
-        (err) => this.ignoreDuplicateKeyErrors(err)
-      );
+      await this.dbCollection.permission
+        .insertMany(batch, { ordered: false })
+        .catch((err) => this.ignoreDuplicateKeyErrors(err));
     }
   }
 
@@ -156,6 +156,63 @@ export class MongoDbSeeder {
   async initialize(): Promise<void> {
     await this.ensureIndexes();
     await Promise.all([this.populateGroups(), this.populatePermissions()]);
+  }
+
+  /**
+   * Seeds a range of new slots into the permission or group collection.
+   * Uses the same batch insert + ignoreDuplicateKeyErrors pattern as initialize.
+   *
+   * @param collection - Which collection to seed ('group' or 'permission')
+   * @param fromPosition - Start position (inclusive)
+   * @param toPosition - End position (inclusive)
+   */
+  async seedRange(
+    collection: 'group' | 'permission',
+    fromPosition: number,
+    toPosition: number
+  ): Promise<void> {
+    if (collection === 'permission') {
+      const batch: IGibbonPermission[] = [];
+      for (let seq = fromPosition; seq <= toPosition; seq++) {
+        batch.push({
+          gibbonPermissionPosition: seq,
+          gibbonIsAllocated: false,
+        });
+        if (batch.length >= BATCH_SIZE) {
+          await this.dbCollection.permission
+            .insertMany(batch, { ordered: false })
+            .catch((err) => this.ignoreDuplicateKeyErrors(err));
+          batch.length = 0;
+        }
+      }
+      if (batch.length > 0) {
+        await this.dbCollection.permission
+          .insertMany(batch, { ordered: false })
+          .catch((err) => this.ignoreDuplicateKeyErrors(err));
+      }
+    } else {
+      const batch: IGibbonGroup[] = [];
+      for (let seq = fromPosition; seq <= toPosition; seq++) {
+        batch.push({
+          permissionsGibbon: Gibbon.create(
+            this.config.permissionByteLength
+          ).toBuffer(),
+          gibbonGroupPosition: seq,
+          gibbonIsAllocated: false,
+        });
+        if (batch.length >= BATCH_SIZE) {
+          await this.dbCollection.group
+            .insertMany(batch, { ordered: false })
+            .catch((err) => this.ignoreDuplicateKeyErrors(err));
+          batch.length = 0;
+        }
+      }
+      if (batch.length > 0) {
+        await this.dbCollection.group
+          .insertMany(batch, { ordered: false })
+          .catch((err) => this.ignoreDuplicateKeyErrors(err));
+      }
+    }
   }
 
   /**

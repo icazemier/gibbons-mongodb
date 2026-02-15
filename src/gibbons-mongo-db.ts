@@ -1,4 +1,10 @@
-import { Binary, ClientSession, Filter, FindCursor, MongoClient } from 'mongodb';
+import {
+  Binary,
+  ClientSession,
+  Filter,
+  FindCursor,
+  MongoClient,
+} from 'mongodb';
 
 import { GibbonUser, GibbonGroup, GibbonPermission } from './models/index.js';
 import { Gibbon } from '@icazemier/gibbons';
@@ -9,6 +15,7 @@ import { IGibbonUser } from './interfaces/gibbon-user.js';
 import { Config } from './interfaces/config.js';
 import { IGibbonPermission } from './interfaces/gibbon-permission.js';
 import { withTransaction } from './utils.js';
+import { MongoDbSeeder } from './seeder.js';
 
 /**
  * Main class which does all the "heavy" lifting against MongoDB for managing
@@ -122,8 +129,11 @@ export class GibbonsMongoDb implements IPermissionsResource {
    * ```
    */
   public getMongoClient(): MongoClient {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
     if (!this.mongoClient) {
-      throw new Error('GibbonsMongoDb is not initialized. Call initialize() first.');
+      throw new Error(
+        'GibbonsMongoDb is not initialized. Call initialize() first.'
+      );
     }
     return this.mongoClient;
   }
@@ -151,7 +161,10 @@ export class GibbonsMongoDb implements IPermissionsResource {
     this.gibbonPermission = new GibbonPermission(mongoClient, config);
     this.gibbonGroup = new GibbonGroup(mongoClient, config);
 
-    const { dbName, dbStructure: { group, permission, user } } = config;
+    const {
+      dbName,
+      dbStructure: { group, permission, user },
+    } = config;
 
     await Promise.all([
       this.gibbonUser.initialize(dbName, user.collectionName),
@@ -848,7 +861,11 @@ export class GibbonsMongoDb implements IPermissionsResource {
     data: T,
     session?: ClientSession
   ): Promise<IGibbonPermission | null> {
-    return this.gibbonPermission.updateMetadata(permissionPosition, data, session);
+    return this.gibbonPermission.updateMetadata(
+      permissionPosition,
+      data,
+      session
+    );
   }
 
   /**
@@ -954,6 +971,211 @@ export class GibbonsMongoDb implements IPermissionsResource {
         permissionsResource,
         s
       );
+    });
+  }
+
+  /**
+   * Expands the permission byte length, seeding new permission slots and
+   * resizing all Binary `permissionsGibbon` fields in groups and users.
+   *
+   * @param newByteLength - Must be greater than the current `permissionByteLength`
+   * @param session - Optional external session (caller owns the transaction)
+   *
+   * @example
+   * ```typescript
+   * // Double the permission capacity
+   * await gibbonsDb.expandPermissions(config.permissionByteLength * 2);
+   * ```
+   */
+  async expandPermissions(
+    newByteLength: number,
+    session?: ClientSession
+  ): Promise<void> {
+    const oldByteLength = this.config.permissionByteLength;
+    if (newByteLength <= oldByteLength) {
+      throw new Error(
+        `newByteLength (${newByteLength}) must be greater than current permissionByteLength (${oldByteLength})`
+      );
+    }
+
+    await this.executeInSession(session, async (s) => {
+      // 1. Seed new permission slots
+      const seeder = new MongoDbSeeder(this.mongoClient, this.config);
+      await seeder.seedRange(
+        'permission',
+        oldByteLength * 8 + 1,
+        newByteLength * 8
+      );
+
+      // 2. Resize permissionsGibbon in every group doc
+      await this.gibbonGroup.resizePermissions(newByteLength, s);
+
+      // 3. Resize permissionsGibbon in every user doc
+      await this.gibbonUser.resizePermissions(newByteLength, s);
+
+      // 4. Update config and model byte lengths
+      this.config.permissionByteLength = newByteLength;
+      (this.gibbonPermission as unknown as { byteLength: number }).byteLength =
+        newByteLength;
+    });
+  }
+
+  /**
+   * Expands the group byte length, seeding new group slots and
+   * resizing all Binary `groupsGibbon` fields in users.
+   *
+   * @param newByteLength - Must be greater than the current `groupByteLength`
+   * @param session - Optional external session (caller owns the transaction)
+   *
+   * @example
+   * ```typescript
+   * await gibbonsDb.expandGroups(config.groupByteLength * 2);
+   * ```
+   */
+  async expandGroups(
+    newByteLength: number,
+    session?: ClientSession
+  ): Promise<void> {
+    const oldByteLength = this.config.groupByteLength;
+    if (newByteLength <= oldByteLength) {
+      throw new Error(
+        `newByteLength (${newByteLength}) must be greater than current groupByteLength (${oldByteLength})`
+      );
+    }
+
+    await this.executeInSession(session, async (s) => {
+      // 1. Seed new group slots (with empty permissionsGibbon at current perm byte length)
+      const seeder = new MongoDbSeeder(this.mongoClient, this.config);
+      await seeder.seedRange('group', oldByteLength * 8 + 1, newByteLength * 8);
+
+      // 2. Resize groupsGibbon in every user doc
+      await this.gibbonUser.resizeGroups(newByteLength, s);
+
+      // 3. Update config and model byte lengths
+      this.config.groupByteLength = newByteLength;
+      (this.gibbonGroup as unknown as { byteLength: number }).byteLength =
+        newByteLength;
+    });
+  }
+
+  /**
+   * Shrinks the permission byte length, removing trailing permission slots
+   * and truncating all Binary `permissionsGibbon` fields in groups and users.
+   *
+   * @param newByteLength - Must be less than the current `permissionByteLength`
+   * @param session - Optional external session (caller owns the transaction)
+   * @throws Error if allocated permissions exist beyond the new boundary
+   *
+   * @example
+   * ```typescript
+   * await gibbonsDb.shrinkPermissions(64);
+   * ```
+   */
+  async shrinkPermissions(
+    newByteLength: number,
+    session?: ClientSession
+  ): Promise<void> {
+    const oldByteLength = this.config.permissionByteLength;
+    if (newByteLength >= oldByteLength) {
+      throw new Error(
+        `newByteLength (${newByteLength}) must be less than current permissionByteLength (${oldByteLength})`
+      );
+    }
+
+    await this.executeInSession(session, async (s) => {
+      // 1. Safety check — count allocated permissions beyond the new boundary
+      const db = this.mongoClient.db(this.config.dbName);
+      const permCollection = db.collection(
+        this.config.dbStructure.permission.collectionName
+      );
+      const beyondCount = await permCollection.countDocuments(
+        {
+          gibbonPermissionPosition: { $gt: newByteLength * 8 },
+          gibbonIsAllocated: true,
+        },
+        { session: s }
+      );
+      if (beyondCount > 0) {
+        throw new Error(
+          'Cannot shrink: allocated permissions exist beyond the new boundary'
+        );
+      }
+
+      // 2. Delete trailing permission slots
+      await permCollection.deleteMany(
+        { gibbonPermissionPosition: { $gt: newByteLength * 8 } },
+        { session: s }
+      );
+
+      // 3. Truncate permissionsGibbon in every group doc
+      await this.gibbonGroup.resizePermissions(newByteLength, s);
+
+      // 4. Truncate permissionsGibbon in every user doc
+      await this.gibbonUser.resizePermissions(newByteLength, s);
+
+      // 5. Update config and model byte lengths
+      this.config.permissionByteLength = newByteLength;
+      (this.gibbonPermission as unknown as { byteLength: number }).byteLength =
+        newByteLength;
+    });
+  }
+
+  /**
+   * Shrinks the group byte length, removing trailing group slots
+   * and truncating all Binary `groupsGibbon` fields in users.
+   *
+   * @param newByteLength - Must be less than the current `groupByteLength`
+   * @param session - Optional external session (caller owns the transaction)
+   * @throws Error if allocated groups exist beyond the new boundary
+   *
+   * @example
+   * ```typescript
+   * await gibbonsDb.shrinkGroups(64);
+   * ```
+   */
+  async shrinkGroups(
+    newByteLength: number,
+    session?: ClientSession
+  ): Promise<void> {
+    const oldByteLength = this.config.groupByteLength;
+    if (newByteLength >= oldByteLength) {
+      throw new Error(
+        `newByteLength (${newByteLength}) must be less than current groupByteLength (${oldByteLength})`
+      );
+    }
+
+    await this.executeInSession(session, async (s) => {
+      // 1. Safety check — count allocated groups beyond the new boundary
+      const db = this.mongoClient.db(this.config.dbName);
+      const groupCollection = db.collection(
+        this.config.dbStructure.group.collectionName
+      );
+      const beyondCount = await groupCollection.countDocuments(
+        {
+          gibbonGroupPosition: { $gt: newByteLength * 8 },
+          gibbonIsAllocated: true,
+        },
+        { session: s }
+      );
+      if (beyondCount > 0) {
+        throw new Error(
+          'Cannot shrink: allocated groups exist beyond the new boundary'
+        );
+      }
+
+      // 2. Delete trailing group slots
+      await groupCollection.deleteMany(
+        { gibbonGroupPosition: { $gt: newByteLength * 8 } },
+        { session: s }
+      );
+
+      // 3. Truncate groupsGibbon in every user doc
+      await this.gibbonUser.resizeGroups(newByteLength, s);
+
+      // 4. Update config and model byte lengths
+      this.config.groupByteLength = newByteLength;
+      (this.gibbonGroup as unknown as { byteLength: number }).byteLength =
+        newByteLength;
     });
   }
 }

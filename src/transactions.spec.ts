@@ -243,10 +243,9 @@ describe('External session / transaction support', () => {
 
   it('unsubscribeUsersFromGroups with external session', async () => {
     // First subscribe Cooper to TRANSFORMERS
-    await mongoDbAdapter.subscribeUsersToGroups(
-      { name: /Cooper/ },
-      [GROUP_POSITION_FIXTURES.TRANSFORMERS]
-    );
+    await mongoDbAdapter.subscribeUsersToGroups({ name: /Cooper/ }, [
+      GROUP_POSITION_FIXTURES.TRANSFORMERS,
+    ]);
 
     // Now unsubscribe within an external transaction
     await withTransaction(adapterClient, async (session) => {

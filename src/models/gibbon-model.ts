@@ -1,5 +1,5 @@
 import { Gibbon } from '@icazemier/gibbons';
-import { MongoClient, Document } from 'mongodb';
+import { Binary, MongoClient, Document } from 'mongodb';
 import { GibbonLike } from '../interfaces/index.js';
 
 /**
@@ -82,5 +82,26 @@ export abstract class GibbonModel implements Document {
       );
     }
     throw new TypeError('`Gibbon`, `Array<number>` or `Buffer` expected');
+  }
+
+  /**
+   * Resizes a Binary-encoded Gibbon to a new byte length by creating a new
+   * Gibbon and merging the old bits into it. Bits beyond the new length are
+   * silently dropped when shrinking.
+   *
+   * @param binary - MongoDB Binary containing the existing Gibbon
+   * @param newByteLength - Target byte length
+   * @returns A Buffer with the resized Gibbon
+   */
+  protected static resizeGibbon(binary: Binary, newByteLength: number): Buffer {
+    const oldBuffer = Buffer.from(binary.buffer);
+    if (oldBuffer.length <= newByteLength) {
+      // Expanding or same size: merge smaller into larger
+      const oldGibbon = Gibbon.decode(oldBuffer);
+      return Gibbon.create(newByteLength).mergeWithGibbon(oldGibbon).toBuffer();
+    }
+    // Shrinking: truncate the buffer first, then decode
+    const truncated = oldBuffer.subarray(0, newByteLength);
+    return Gibbon.decode(Buffer.from(truncated)).toBuffer();
   }
 }

@@ -182,7 +182,10 @@ export class GibbonPermission extends GibbonModel {
     data: T,
     session?: ClientSession
   ): Promise<IGibbonPermission | null> {
-    const options: FindOneAndUpdateOptions = { returnDocument: 'after', session };
+    const options: FindOneAndUpdateOptions = {
+      returnDocument: 'after',
+      session,
+    };
     return this.dbCollection.findOneAndUpdate(
       { gibbonPermissionPosition: permissionPosition, gibbonIsAllocated: true },
       { $set: data as Partial<IGibbonPermission> },

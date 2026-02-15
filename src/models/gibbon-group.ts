@@ -389,7 +389,10 @@ export class GibbonGroup extends GibbonModel {
     data: T,
     session?: ClientSession
   ): Promise<IGibbonGroup | null> {
-    const options: FindOneAndUpdateOptions = { returnDocument: 'after', session };
+    const options: FindOneAndUpdateOptions = {
+      returnDocument: 'after',
+      session,
+    };
     const result = await this.dbCollection.findOneAndUpdate(
       { gibbonGroupPosition: groupPosition, gibbonIsAllocated: true },
       { $set: data as Partial<IGibbonGroup> },
@@ -408,6 +411,32 @@ export class GibbonGroup extends GibbonModel {
    * @param permissions - Gibbon representing permissions to unsubscribe
    * @param session - Optional MongoDB client session for transactional operations
    */
+  /**
+   * Resizes the `permissionsGibbon` field in every group document
+   * to the given byte length and updates the model's internal byte length.
+   *
+   * @param newByteLength - Target byte length for permission gibbons
+   * @param session - Optional MongoDB client session for transactional operations
+   */
+  async resizePermissions(
+    newByteLength: number,
+    session?: ClientSession
+  ): Promise<void> {
+    const cursor = this.dbCollection.find({}, { session });
+    for await (const group of cursor) {
+      const resized = GibbonGroup.resizeGibbon(
+        group.permissionsGibbon as Binary,
+        newByteLength
+      );
+      await this.dbCollection.updateOne(
+        { gibbonGroupPosition: group.gibbonGroupPosition },
+        { $set: { permissionsGibbon: resized } },
+        { session }
+      );
+    }
+    await cursor.close();
+  }
+
   async unsubscribePermissions(
     groups: Gibbon,
     permissions: Gibbon,
