@@ -1,3 +1,4 @@
+import { Buffer } from 'node:buffer';
 import { Gibbon } from '@icazemier/gibbons';
 import { Binary, MongoClient, Document } from 'mongodb';
 import { GibbonLike } from '../interfaces/index.js';

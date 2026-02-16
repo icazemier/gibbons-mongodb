@@ -10,7 +10,7 @@ import {
 import { Gibbon } from '@icazemier/gibbons';
 import { Binary, Collection, Filter, MongoClient, ObjectId } from 'mongodb';
 import { writableNoopStream } from 'noop-stream';
-import { pipeline, PassThrough } from 'stream';
+import { pipeline, PassThrough } from 'node:stream';
 import {
   usersFixtures,
   groupsFixtures,
