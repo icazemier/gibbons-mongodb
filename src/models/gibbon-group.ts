@@ -114,7 +114,7 @@ export class GibbonGroup extends GibbonModel {
       permissionsGibbon: 1,
     };
 
-    // Get FindCursor instance for groups groups
+    // Get FindCursor instance for groups
     const groupCursor = this.dbCollection.find(filter, { projection, session });
 
     // Create fresh permissions space as we're rebuilding permissions scratch
@@ -402,16 +402,6 @@ export class GibbonGroup extends GibbonModel {
   }
 
   /**
-   * Unsets the given permission bits from the specified groups.
-   * This is the reverse of {@link subscribePermissions}.
-   *
-   * Note: recalculating user permissions is handled by the facade.
-   *
-   * @param groups - Gibbon representing groups to update
-   * @param permissions - Gibbon representing permissions to unsubscribe
-   * @param session - Optional MongoDB client session for transactional operations
-   */
-  /**
    * Resizes the `permissionsGibbon` field in every group document
    * to the given byte length and updates the model's internal byte length.
    *
@@ -437,6 +427,16 @@ export class GibbonGroup extends GibbonModel {
     await cursor.close();
   }
 
+  /**
+   * Unsets the given permission bits from the specified groups.
+   * This is the reverse of {@link subscribePermissions}.
+   *
+   * Note: recalculating user permissions is handled by the facade.
+   *
+   * @param groups - Gibbon representing groups to update
+   * @param permissions - Gibbon representing permissions to unsubscribe
+   * @param session - Optional MongoDB client session for transactional operations
+   */
   async unsubscribePermissions(
     groups: Gibbon,
     permissions: Gibbon,

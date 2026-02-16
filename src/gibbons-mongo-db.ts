@@ -380,7 +380,7 @@ export class GibbonsMongoDb implements IPermissionsResource {
    *
    * @example
    *
-   * Lets assume, position 1 and 2 aren't allocated, but 3 is. We should expect the 3rd time, to allocate position 4
+   * Let's assume, position 1 and 2 aren't allocated, but 3 is. We should expect the 3rd time, to allocate position 4
    *
    * ```
    *
@@ -548,7 +548,7 @@ export class GibbonsMongoDb implements IPermissionsResource {
    * Queries database if given groups are indeed allocated (possible to validate the non-allocated ones)
    *
    * @param groups - Group positions to validate
-   * @param allocated=true search for allocated or non-allocated
+   * @param allocated - Search for allocated or non-allocated (defaults to true)
    * @returns true if all groups match the allocation state
    *
    * @example
@@ -571,7 +571,7 @@ export class GibbonsMongoDb implements IPermissionsResource {
    * Queries database if given permissions are indeed allocated (possible to validate the non-allocated ones)
    *
    * @param permissions - Permission positions to validate
-   * @param allocated=true search for allocated or non-allocated
+   * @param allocated - Search for allocated or non-allocated (defaults to true)
    * @returns true if all permissions match the allocation state
    *
    * @example

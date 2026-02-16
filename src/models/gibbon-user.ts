@@ -321,16 +321,6 @@ export class GibbonUser extends GibbonModel {
   }
 
   /**
-   * Creates a new user document with empty group and permission gibbons.
-   *
-   * @param data - Additional data to store on the user document (e.g. name, email)
-   * @param groupByteLength - Byte length for the groups Gibbon
-   * @param permissionByteLength - Byte length for the permissions Gibbon
-   * @param session - Optional MongoDB client session for transactional operations
-   * @returns The newly created user document
-   * @throws Error when the user could not be inserted
-   */
-  /**
    * Resizes the `permissionsGibbon` field in every user document
    * to the given byte length.
    *
@@ -382,6 +372,16 @@ export class GibbonUser extends GibbonModel {
     await cursor.close();
   }
 
+  /**
+   * Creates a new user document with empty group and permission gibbons.
+   *
+   * @param data - Additional data to store on the user document (e.g. name, email)
+   * @param groupByteLength - Byte length for the groups Gibbon
+   * @param permissionByteLength - Byte length for the permissions Gibbon
+   * @param session - Optional MongoDB client session for transactional operations
+   * @returns The newly created user document
+   * @throws Error when the user could not be inserted
+   */
   async create<T>(
     data: T,
     groupByteLength: number,
@@ -408,7 +408,9 @@ export class GibbonUser extends GibbonModel {
   /**
    * Remove user(s) matching the given filter
    *
+   * @param filter - MongoDB filter to select users to remove
    * @param session - Optional MongoDB client session for transactional operations
+   * @returns Number of deleted users
    */
   async remove(
     filter: Filter<IGibbonUser>,
@@ -420,6 +422,9 @@ export class GibbonUser extends GibbonModel {
 
   /**
    * Find users by arbitrary MongoDB filter
+   *
+   * @param filter - MongoDB filter query
+   * @returns A MongoDB FindCursor of matching user documents
    */
   findByFilter(filter: Filter<IGibbonUser>): FindCursor<IGibbonUser> {
     return this.dbCollection
@@ -431,6 +436,9 @@ export class GibbonUser extends GibbonModel {
    * Unsubscribe users matching filter from specific groups,
    * then recalculate their permissions from remaining groups
    *
+   * @param filter - MongoDB filter to select users
+   * @param groups - Groups to unsubscribe from
+   * @param permissionsResource - Resource used to recalculate permissions
    * @param session - Optional MongoDB client session for transactional operations
    */
   async unsubscribeFromGroups(
@@ -481,6 +489,8 @@ export class GibbonUser extends GibbonModel {
    * Recalculate permissions for users matching the filter
    * based on their current group memberships
    *
+   * @param filter - MongoDB filter to select users
+   * @param permissionsResource - Resource used to fetch permissions from groups
    * @param session - Optional MongoDB client session for transactional operations
    */
   async recalculatePermissions(
