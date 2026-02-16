@@ -1,7 +1,7 @@
 {
   "name": "@icazemier/gibbons-mongodb",
   "private": false,
-  "version": "1.0.0-beta.1",
+  "version": "0.0.0",
   "type": "module",
   "description": "Gibbons is a Node.js module which helps in managing user groups and user permissions with `bitwise` efficiency.",
   "contributors": [
@@ -48,7 +48,7 @@
     "build:esm": "tsc -p tsconfig-build-esm.json",
     "build:cjs": "tsc -p tsconfig-build-cjs.json",
     "build": "rimraf build && npm run build:esm && npm run build:cjs && npm run fixup && npm run docs",
-    "docs": "typedoc --out docs src/index.ts",
+    "docs": "typedoc --out docs/api src/index.ts",
     "fixup": "node ./fixup.mjs",
     "clean:build": "rimraf build",
     "clean:docs": "rimraf docs",
@@ -75,7 +75,7 @@
     "mongodb": "^6.0.0"
   },
   "dependencies": {
-    "@icazemier/gibbons": "^5.0.4",
+    "@icazemier/gibbons": "^6.0.0",
     "cosmiconfig": "^9.0.0",
     "yargs": "^17.7.2"
   },
