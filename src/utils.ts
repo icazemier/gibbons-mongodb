@@ -20,7 +20,11 @@ export async function withTransaction<T>(
     });
     return result;
   } finally {
-    await session.endSession();
+    try {
+      await session.endSession();
+    } catch {
+      // Swallow endSession errors so they don't mask the original error
+    }
   }
 }
 
@@ -42,6 +46,9 @@ export class Utils {
   public static async *sequenceGenerator(
     amount: number
   ): AsyncGenerator<number> {
+    if (!Number.isInteger(amount) || amount < 0) {
+      throw new RangeError('amount must be a non-negative integer');
+    }
     for (let i = 1; i <= amount; i++) {
       yield i;
     }

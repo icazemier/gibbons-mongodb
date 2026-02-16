@@ -180,7 +180,16 @@ export class GibbonGroup extends GibbonModel {
    * @returns The newly allocated group document
    * @throws Error when all group slots are already allocated
    */
-  async allocate<T>(data: T, session?: ClientSession): Promise<IGibbonGroup> {
+  async allocate<T extends Record<string, unknown>>(
+    data: T,
+    session?: ClientSession
+  ): Promise<IGibbonGroup> {
+    const sanitized = GibbonGroup.sanitizeData(data);
+    // Prevent overwriting managed fields
+    delete sanitized.gibbonGroupPosition;
+    delete sanitized.gibbonIsAllocated;
+    delete sanitized.permissionsGibbon;
+
     // Query for a non-allocated group
     const filter = {
       gibbonIsAllocated: false,
@@ -195,7 +204,7 @@ export class GibbonGroup extends GibbonModel {
 
     // Prepare an update, ensure we allocate
     const $set = {
-      ...data,
+      ...sanitized,
       gibbonIsAllocated: true,
       permissionsGibbon: Gibbon.create(this.byteLength).toBuffer(),
     } as UpdateFilter<IGibbonGroup>;
@@ -389,13 +398,19 @@ export class GibbonGroup extends GibbonModel {
     data: T,
     session?: ClientSession
   ): Promise<IGibbonGroup | null> {
+    const sanitized = GibbonGroup.sanitizeData(data);
+    // Prevent overwriting managed fields
+    delete sanitized.gibbonGroupPosition;
+    delete sanitized.gibbonIsAllocated;
+    delete sanitized.permissionsGibbon;
+
     const options: FindOneAndUpdateOptions = {
       returnDocument: 'after',
       session,
     };
     const result = await this.dbCollection.findOneAndUpdate(
       { gibbonGroupPosition: groupPosition, gibbonIsAllocated: true },
-      { $set: data as Partial<IGibbonGroup> },
+      { $set: sanitized as Partial<IGibbonGroup> },
       options
     );
     return result ? GibbonGroup.mapPermissionsBinaryToGibbon(result) : null;

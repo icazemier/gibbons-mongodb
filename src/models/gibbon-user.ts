@@ -306,13 +306,18 @@ export class GibbonUser extends GibbonModel {
     data: T,
     session?: ClientSession
   ): Promise<IGibbonUser | null> {
+    const sanitized = GibbonUser.sanitizeData(data);
+    // Prevent overwriting managed fields
+    delete sanitized.groupsGibbon;
+    delete sanitized.permissionsGibbon;
+
     const options: FindOneAndUpdateOptions = {
       returnDocument: 'after',
       session,
     };
     const result = await this.dbCollection.findOneAndUpdate(
       filter,
-      { $set: data as Partial<IGibbonUser> },
+      { $set: sanitized as Partial<IGibbonUser> },
       options
     );
     return result
@@ -382,21 +387,24 @@ export class GibbonUser extends GibbonModel {
    * @returns The newly created user document
    * @throws Error when the user could not be inserted
    */
-  async create<T>(
+  async create<T extends Record<string, unknown>>(
     data: T,
     groupByteLength: number,
     permissionByteLength: number,
     session?: ClientSession
   ): Promise<IGibbonUser> {
+    const sanitized = GibbonUser.sanitizeData(data);
+    // Strip fields managed internally to prevent injection
+    delete sanitized.groupsGibbon;
+    delete sanitized.permissionsGibbon;
+    delete sanitized._id;
+
     const doc = {
-      ...data,
+      ...sanitized,
       groupsGibbon: Gibbon.create(groupByteLength).toBuffer(),
       permissionsGibbon: Gibbon.create(permissionByteLength).toBuffer(),
-    };
-    const result = await this.dbCollection.insertOne(
-      doc as unknown as IGibbonUser,
-      { session }
-    );
+    } as IGibbonUser;
+    const result = await this.dbCollection.insertOne(doc, { session });
     const user = await this.dbCollection.findOne(
       { _id: result.insertedId },
       { session }

@@ -337,7 +337,7 @@ export class GibbonsMongoDb implements IPermissionsResource {
    * console.log(permission.gibbonIsAllocated); // true
    * ```
    */
-  async allocatePermission<T>(
+  async allocatePermission<T extends Record<string, unknown>>(
     data: T,
     session?: ClientSession
   ): Promise<IGibbonPermission> {
@@ -407,8 +407,8 @@ export class GibbonsMongoDb implements IPermissionsResource {
    * @param data Anything really, at least MongoDB compatible
    * @returns Created group
    */
-  public async allocateGroup<OmitGibbonGroupPosition>(
-    data: OmitGibbonGroupPosition,
+  public async allocateGroup<T extends Record<string, unknown>>(
+    data: T,
     session?: ClientSession
   ): Promise<IGibbonGroup> {
     return this.gibbonGroup.allocate(data, session);
@@ -723,7 +723,10 @@ export class GibbonsMongoDb implements IPermissionsResource {
    * console.log(user.permissionsGibbon); // Empty Gibbon (no permissions yet)
    * ```
    */
-  async createUser<T>(data: T, session?: ClientSession): Promise<IGibbonUser> {
+  async createUser<T extends Record<string, unknown>>(
+    data: T,
+    session?: ClientSession
+  ): Promise<IGibbonUser> {
     const { groupByteLength, permissionByteLength } = this.config;
     return this.gibbonUser.create(
       data,
@@ -991,6 +994,9 @@ export class GibbonsMongoDb implements IPermissionsResource {
     newByteLength: number,
     session?: ClientSession
   ): Promise<void> {
+    if (!Number.isInteger(newByteLength) || newByteLength < 1) {
+      throw new RangeError('newByteLength must be a positive integer');
+    }
     const oldByteLength = this.config.permissionByteLength;
     if (newByteLength <= oldByteLength) {
       throw new Error(
@@ -1015,8 +1021,7 @@ export class GibbonsMongoDb implements IPermissionsResource {
 
       // 4. Update config and model byte lengths
       this.config.permissionByteLength = newByteLength;
-      (this.gibbonPermission as unknown as { byteLength: number }).byteLength =
-        newByteLength;
+      this.gibbonPermission.setByteLength(newByteLength);
     });
   }
 
@@ -1036,6 +1041,9 @@ export class GibbonsMongoDb implements IPermissionsResource {
     newByteLength: number,
     session?: ClientSession
   ): Promise<void> {
+    if (!Number.isInteger(newByteLength) || newByteLength < 1) {
+      throw new RangeError('newByteLength must be a positive integer');
+    }
     const oldByteLength = this.config.groupByteLength;
     if (newByteLength <= oldByteLength) {
       throw new Error(
@@ -1053,8 +1061,7 @@ export class GibbonsMongoDb implements IPermissionsResource {
 
       // 3. Update config and model byte lengths
       this.config.groupByteLength = newByteLength;
-      (this.gibbonGroup as unknown as { byteLength: number }).byteLength =
-        newByteLength;
+      this.gibbonGroup.setByteLength(newByteLength);
     });
   }
 
@@ -1075,6 +1082,9 @@ export class GibbonsMongoDb implements IPermissionsResource {
     newByteLength: number,
     session?: ClientSession
   ): Promise<void> {
+    if (!Number.isInteger(newByteLength) || newByteLength < 1) {
+      throw new RangeError('newByteLength must be a positive integer');
+    }
     const oldByteLength = this.config.permissionByteLength;
     if (newByteLength >= oldByteLength) {
       throw new Error(
@@ -1115,8 +1125,7 @@ export class GibbonsMongoDb implements IPermissionsResource {
 
       // 5. Update config and model byte lengths
       this.config.permissionByteLength = newByteLength;
-      (this.gibbonPermission as unknown as { byteLength: number }).byteLength =
-        newByteLength;
+      this.gibbonPermission.setByteLength(newByteLength);
     });
   }
 
@@ -1137,6 +1146,9 @@ export class GibbonsMongoDb implements IPermissionsResource {
     newByteLength: number,
     session?: ClientSession
   ): Promise<void> {
+    if (!Number.isInteger(newByteLength) || newByteLength < 1) {
+      throw new RangeError('newByteLength must be a positive integer');
+    }
     const oldByteLength = this.config.groupByteLength;
     if (newByteLength >= oldByteLength) {
       throw new Error(
@@ -1174,8 +1186,7 @@ export class GibbonsMongoDb implements IPermissionsResource {
 
       // 4. Update config and model byte lengths
       this.config.groupByteLength = newByteLength;
-      (this.gibbonGroup as unknown as { byteLength: number }).byteLength =
-        newByteLength;
+      this.gibbonGroup.setByteLength(newByteLength);
     });
   }
 }

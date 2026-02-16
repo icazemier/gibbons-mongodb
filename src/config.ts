@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { cosmiconfig } from 'cosmiconfig';
 import { CosmiconfigResult } from 'cosmiconfig/dist/types.js';
 import { Config } from './interfaces/config.js';
@@ -27,6 +28,13 @@ export class ConfigLoader {
     filepath?: string
   ): Promise<Config> {
     const explorer = cosmiconfig(module || 'gibbons-mongodb');
+
+    if (filepath) {
+      const resolved = path.resolve(filepath);
+      if (resolved.includes('\0')) {
+        throw new Error('Invalid filepath: null bytes are not allowed');
+      }
+    }
 
     const configResult = (
       filepath ? await explorer.load(filepath) : await explorer.search()

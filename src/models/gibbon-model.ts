@@ -18,6 +18,19 @@ export abstract class GibbonModel implements Document {
   ) {}
 
   /**
+   * Updates the internal byte length used by this model.
+   * This is the safe alternative to direct property mutation via type casts.
+   *
+   * @param newByteLength - The new byte length (must be a positive integer)
+   */
+  public setByteLength(newByteLength: number): void {
+    if (!Number.isInteger(newByteLength) || newByteLength < 1) {
+      throw new RangeError('byteLength must be a positive integer');
+    }
+    this.byteLength = newByteLength;
+  }
+
+  /**
    * Initializes the model by binding it to a specific database and collection.
    *
    * @param dbName - Database name to bind to
@@ -75,6 +88,13 @@ export abstract class GibbonModel implements Document {
       }
       return Gibbon.create(byteLength).mergeWithGibbon(positions);
     } else if (Array.isArray(positions)) {
+      for (const pos of positions) {
+        if (!Number.isInteger(pos) || pos < 1) {
+          throw new RangeError(
+            `Position must be a positive integer, got: ${pos}`
+          );
+        }
+      }
       return Gibbon.create(byteLength).setAllFromPositions(positions);
     } else if (Buffer.isBuffer(positions)) {
       return Gibbon.create(byteLength).mergeWithGibbon(
@@ -82,6 +102,25 @@ export abstract class GibbonModel implements Document {
       );
     }
     throw new TypeError('`Gibbon`, `Array<number>` or `Buffer` expected');
+  }
+
+  /**
+   * Strips keys that start with `$` or contain `.` from user-provided data
+   * to prevent MongoDB operator injection (e.g. `$set`, `$gt`).
+   *
+   * @param data - User-provided key-value pairs
+   * @returns A shallow copy with dangerous keys removed
+   */
+  protected static sanitizeData<T extends Record<string, unknown>>(
+    data: T
+  ): Record<string, unknown> {
+    const sanitized: Record<string, unknown> = {};
+    for (const key of Object.keys(data)) {
+      if (!key.startsWith('$') && !key.includes('.')) {
+        sanitized[key] = data[key];
+      }
+    }
+    return sanitized;
   }
 
   /**
@@ -94,6 +133,9 @@ export abstract class GibbonModel implements Document {
    * @returns A Buffer with the resized Gibbon
    */
   protected static resizeGibbon(binary: Binary, newByteLength: number): Buffer {
+    if (!Number.isInteger(newByteLength) || newByteLength < 1) {
+      throw new RangeError('newByteLength must be a positive integer');
+    }
     const oldBuffer = Buffer.from(binary.buffer);
     if (oldBuffer.length <= newByteLength) {
       // Expanding or same size: merge smaller into larger

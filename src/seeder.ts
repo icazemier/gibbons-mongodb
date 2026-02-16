@@ -171,6 +171,16 @@ export class MongoDbSeeder {
     fromPosition: number,
     toPosition: number
   ): Promise<void> {
+    if (
+      !Number.isInteger(fromPosition) ||
+      !Number.isInteger(toPosition) ||
+      fromPosition < 1 ||
+      toPosition < fromPosition
+    ) {
+      throw new RangeError(
+        `Invalid range: fromPosition (${fromPosition}) and toPosition (${toPosition}) must be positive integers with fromPosition <= toPosition`
+      );
+    }
     if (collection === 'permission') {
       const batch: IGibbonPermission[] = [];
       for (let seq = fromPosition; seq <= toPosition; seq++) {

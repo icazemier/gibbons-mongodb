@@ -41,10 +41,15 @@ export class GibbonPermission extends GibbonModel {
    * @returns The newly allocated permission document
    * @throws Error when all permission slots are already allocated
    */
-  async allocate<T>(
+  async allocate<T extends Record<string, unknown>>(
     data: T,
     session?: ClientSession
   ): Promise<IGibbonPermission> {
+    const sanitized = GibbonPermission.sanitizeData(data);
+    // Prevent overwriting managed fields
+    delete sanitized.gibbonPermissionPosition;
+    delete sanitized.gibbonIsAllocated;
+
     // Query for a non-allocated permission
     const filter = {
       gibbonIsAllocated: false,
@@ -58,7 +63,7 @@ export class GibbonPermission extends GibbonModel {
     // Prepare an update, ensure we allocate
     const update = {
       $set: {
-        ...data,
+        ...sanitized,
         gibbonIsAllocated: true,
       },
     };
@@ -182,13 +187,18 @@ export class GibbonPermission extends GibbonModel {
     data: T,
     session?: ClientSession
   ): Promise<IGibbonPermission | null> {
+    const sanitized = GibbonPermission.sanitizeData(data);
+    // Prevent overwriting managed fields
+    delete sanitized.gibbonPermissionPosition;
+    delete sanitized.gibbonIsAllocated;
+
     const options: FindOneAndUpdateOptions = {
       returnDocument: 'after',
       session,
     };
     return this.dbCollection.findOneAndUpdate(
       { gibbonPermissionPosition: permissionPosition, gibbonIsAllocated: true },
-      { $set: data as Partial<IGibbonPermission> },
+      { $set: sanitized as Partial<IGibbonPermission> },
       options
     );
   }
