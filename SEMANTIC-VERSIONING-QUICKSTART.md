@@ -1,6 +1,6 @@
 # Semantic Versioning
 
-This project uses automated semantic versioning. See [docs/SEMANTIC-VERSIONING.md](docs/SEMANTIC-VERSIONING.md) for the complete guide.
+This project uses automated semantic versioning. See [guides/SEMANTIC-VERSIONING.md](guides/SEMANTIC-VERSIONING.md) for the complete guide.
 
 ## Quick Start
 
@@ -31,4 +31,4 @@ Releases happen automatically when you push to:
 - `main`/`master` → Stable release (e.g., `1.0.0`)
 - `development` → Beta pre-release (e.g., `1.1.0-beta.1`)
 
-Read the full guide: [docs/SEMANTIC-VERSIONING.md](docs/SEMANTIC-VERSIONING.md)
+Read the full guide: [guides/SEMANTIC-VERSIONING.md](guides/SEMANTIC-VERSIONING.md)
