@@ -22,7 +22,7 @@ const usersFixtures = [
     groupsGibbon: Gibbon.create(1024)
       .setPosition(GROUP_POSITION_FIXTURES.A_TEAM)
       .toBuffer(),
-    permissionsGibbon: Buffer.alloc(1),
+    permissionsGibbon: Gibbon.create(1).toBuffer(),
   },
   {
     email: 'info@knightrideronline.com',
@@ -30,7 +30,7 @@ const usersFixtures = [
     groupsGibbon: Gibbon.create(1024)
       .setPosition(GROUP_POSITION_FIXTURES.TRANSFORMERS)
       .toBuffer(),
-    permissionsGibbon: Buffer.alloc(1),
+    permissionsGibbon: Gibbon.create(1).toBuffer(),
   },
   {
     email: 'captain@planet.nl',
@@ -41,7 +41,7 @@ const usersFixtures = [
         GROUP_POSITION_FIXTURES.A_TEAM,
       ])
       .toBuffer(),
-    permissionsGibbon: Buffer.alloc(1),
+    permissionsGibbon: Gibbon.create(1).toBuffer(),
   },
   {
     email: 'mankind@earth.born',
@@ -49,14 +49,14 @@ const usersFixtures = [
     groupsGibbon: Gibbon.create(1024)
       .setPosition(GROUP_POSITION_FIXTURES.PLANETEERS)
       .toBuffer(),
-    permissionsGibbon: Buffer.alloc(1),
+    permissionsGibbon: Gibbon.create(1).toBuffer(),
   },
   {
     email: 'john@doe.born',
     name: 'John',
     // No group, means no permissions ;)
     groupsGibbon: Gibbon.create(1024).toBuffer(),
-    permissionsGibbon: Buffer.alloc(1),
+    permissionsGibbon: Gibbon.create(1).toBuffer(),
   },
 ];
 
