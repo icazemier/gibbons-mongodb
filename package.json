@@ -77,7 +77,7 @@
     "minimatch": "^10.2.4"
   },
   "dependencies": {
-    "@icazemier/gibbons": "^6.0.3",
+    "@icazemier/gibbons": "^6.0.4",
     "cosmiconfig": "^9.0.0",
     "yargs": "^17.7.2"
   },
