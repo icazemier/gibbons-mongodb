@@ -8,16 +8,14 @@ on:
       - development
 
 permissions:
-  contents: write
-  issues: write
-  pull-requests: write
-  id-token: write
-  packages: write
+  contents: read
 
 jobs:
   test:
     name: Test on Node ${{ matrix.node-version }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     if: "!contains(github.event.head_commit.message, 'skip ci') && !contains(github.event.head_commit.message, 'skip release')"
     strategy:
       matrix:
@@ -48,6 +46,12 @@ jobs:
     name: Semantic Release
     needs: test
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+      id-token: write
+      packages: write
     if: "!contains(github.event.head_commit.message, 'skip ci') && !contains(github.event.head_commit.message, 'skip release')"
     steps:
       - name: Checkout
@@ -121,13 +125,15 @@ jobs:
 
       - name: Update jsr.json version
         if: steps.version.outputs.skip != 'true'
+        env:
+          JSR_VERSION: ${{ steps.version.outputs.version }}
         run: |
-          node -e "
-            const fs = require('fs');
-            const jsr = JSON.parse(fs.readFileSync('jsr.json', 'utf8'));
-            jsr.version = '${{ steps.version.outputs.version }}';
-            fs.writeFileSync('jsr.json', JSON.stringify(jsr, null, 2) + '\n');
-          "
+          node -e '
+            const fs = require("fs");
+            const jsr = JSON.parse(fs.readFileSync("jsr.json", "utf8"));
+            jsr.version = process.env.JSR_VERSION;
+            fs.writeFileSync("jsr.json", JSON.stringify(jsr, null, 2) + "\n");
+          '
 
       - name: Publish to JSR
         if: steps.version.outputs.skip != 'true'
