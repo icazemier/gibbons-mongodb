@@ -77,10 +77,16 @@
     "minimatch": "^10.2.4",
     "lodash": "^4.18.1",
     "lodash-es": "^4.18.1",
-    "vite": "^7.3.2"
+    "vite": "^7.3.2",
+    "fast-uri": "^3.1.2",
+    "follow-redirects": "^1.16.0",
+    "postcss": "^8.5.14",
+    "picomatch": "^4.0.4",
+    "ip-address": "^10.2.0",
+    "brace-expansion": "^5.0.6"
   },
   "dependencies": {
-    "@icazemier/gibbons": "^6.0.5",
+    "@icazemier/gibbons": "^6.0.7",
     "cosmiconfig": "^9.0.0",
     "yargs": "^17.7.2"
   },
