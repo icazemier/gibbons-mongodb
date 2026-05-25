@@ -1,0 +1,15 @@
+{
+  "name": "@icazemier/gibbons-mongodb",
+  "version": "0.0.0",
+  "license": "MIT",
+  "exports": "./src/index.ts",
+  "exclude": ["node_modules/", "build/", "docs/"],
+  "imports": {
+    "mongodb": "npm:mongodb@^6.0.0",
+    "@icazemier/gibbons": "npm:@icazemier/gibbons@^6.0.7",
+    "cosmiconfig": "npm:cosmiconfig@^9.0.0",
+    "cosmiconfig/": "npm:cosmiconfig@^9.0.0/",
+    "yargs": "npm:yargs@^17.7.2",
+    "yargs/helpers": "npm:yargs@^17.7.2/helpers"
+  }
+}

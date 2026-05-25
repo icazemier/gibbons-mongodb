@@ -36,7 +36,8 @@
   },
   "types": "./build/esm/index.d.ts",
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=20.0.0",
+    "bun": ">=1.0.0"
   },
   "os": [
     "darwin",
