@@ -4,6 +4,27 @@
 
 Manage user groups and permissions in [MongoDB](https://www.mongodb.com/) using bitwise operations with [Gibbons](https://github.com/icazemier/gibbons). Store and query thousands of permissions using minimal space.
 
+## Runtime Compatibility
+
+| Runtime | Support | Install |
+|---------|---------|---------|
+| Node.js 20+ | ✅ Native | `npm install @icazemier/gibbons-mongodb mongodb` |
+| Bun | ✅ Native | `bun add @icazemier/gibbons-mongodb mongodb` |
+| Deno | ✅ via `npm:` | See below |
+
+### Deno
+
+```typescript
+import { GibbonsMongoDb, ConfigLoader } from "npm:@icazemier/gibbons-mongodb";
+import { MongoClient } from "npm:mongodb";
+```
+
+Run with the required permissions:
+
+```bash
+deno run --allow-env --allow-net --allow-read --allow-sys your-script.ts
+```
+
 ## Install
 
 ```bash

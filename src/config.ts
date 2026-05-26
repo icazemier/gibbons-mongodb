@@ -1,6 +1,6 @@
 import path from 'node:path';
 import { cosmiconfig } from 'cosmiconfig';
-import { CosmiconfigResult } from 'cosmiconfig/dist/types.js';
+import type { CosmiconfigResult } from 'cosmiconfig';
 import { Config } from './interfaces/config.js';
 
 export class ConfigLoader {
