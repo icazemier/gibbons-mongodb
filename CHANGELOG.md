@@ -1,3 +1,16 @@
+## [1.0.4-beta.7](https://github.com/icazemier/gibbons-mongodb/compare/v1.0.4-beta.6...v1.0.4-beta.7) (2026-05-27)
+
+### ⏪ Reverts
+
+* remove @semantic-release/git plugin ([dd0a563](https://github.com/icazemier/gibbons-mongodb/commit/dd0a563956e8ce84cb0f3d3c7b8f40ffd18f58b4))
+* remove @semantic-release/git plugin (again) ([3cd9fde](https://github.com/icazemier/gibbons-mongodb/commit/3cd9fde9dbfaea61e2fe8f0a3de5d2340551dc30))
+
+### 📚 Documentation
+
+* add Runtime Compatibility section and fix cosmiconfig type import ([fc2a8d1](https://github.com/icazemier/gibbons-mongodb/commit/fc2a8d1209c144b3abae3b54436a9590a2b53466))
+
+
+
 ## [1.0.9](https://github.com/icazemier/gibbons-mongodb/compare/v1.0.8...v1.0.9) (2026-05-14)
 
 ### 🐛 Bug Fixes
