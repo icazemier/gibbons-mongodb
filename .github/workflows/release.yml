@@ -19,7 +19,7 @@ jobs:
     if: "!contains(github.event.head_commit.message, 'skip ci') && !contains(github.event.head_commit.message, 'skip release')"
     strategy:
       matrix:
-        node-version: [20.x, 22.x, 24.x]
+        node-version: [20.x, 22.x, 24.x, 26.x]
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -130,9 +130,9 @@ jobs:
         run: |
           node -e '
             const fs = require("fs");
-            const jsr = JSON.parse(fs.readFileSync("deno.json", "utf8"));
-            jsr.version = process.env.JSR_VERSION;
-            fs.writeFileSync("deno.json", JSON.stringify(jsr, null, 2) + "\n");
+            const deno = JSON.parse(fs.readFileSync("deno.json", "utf8"));
+            deno.version = process.env.JSR_VERSION;
+            fs.writeFileSync("deno.json", JSON.stringify(deno, null, 2) + "\n");
           '
 
       - name: Publish to JSR
