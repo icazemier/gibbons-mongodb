@@ -94,7 +94,6 @@
     "@commitlint/cli": "^19.6.0",
     "@commitlint/config-conventional": "^19.6.0",
     "@eslint/js": "^10.0.0",
-    "@semantic-release/changelog": "^6.0.3",
     "@types/node": "^22.15.15",
     "@types/yargs": "^17.0.33",
     "@vitest/coverage-v8": "^4.0.18",
